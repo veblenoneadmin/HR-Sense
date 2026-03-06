@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── HR-Sense Native Models ───────────────────────────────────────────────────
+// These are HR-specific tables that live in HR-Sense's own database.
+// Employee/task/time data is fetched live from EverSense API.
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  headEsId  String?  // EverSense user ID of department head
+  orgId     String   // EverSense org ID
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees   EmployeeProfile[]
+  leavePolicy LeavePolicy?
+
+  @@map("departments")
+}
+
+model EmployeeProfile {
+  id           String   @id @default(cuid())
+  esUserId     String   @unique // EverSense User.id
+  employeeCode String   @unique
+  title        String
+  baseSalary   Float    @default(0)
+  currency     String   @default("USD")
+  startDate    DateTime
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  leaveBalances LeaveBalance[]
+  leaveRequests LeaveRequest[]
+  payrollRecords PayrollRecord[]
+
+  @@index([esUserId])
+  @@map("employee_profiles")
+}
+
+// ─── Leave Management ─────────────────────────────────────────────────────────
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  UNPAID
+  MATERNITY
+  PATERNITY
+  BEREAVEMENT
+  PERSONAL
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model LeavePolicy {
+  id           String  @id @default(cuid())
+  departmentId String  @unique
+  annualDays   Int     @default(20)
+  sickDays     Int     @default(10)
+  unpaidDays   Int     @default(30)
+  maternityDays Int    @default(90)
+  paternityDays Int    @default(14)
+  bereavementDays Int  @default(5)
+  personalDays Int     @default(5)
+
+  department Department @relation(fields: [departmentId], references: [id])
+
+  @@map("leave_policies")
+}
+
+model LeaveBalance {
+  id          String    @id @default(cuid())
+  year        Int
+  type        LeaveType
+  entitled    Int
+  used        Int       @default(0)
+  remaining   Int
+
+  employeeId  String
+  employee    EmployeeProfile @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, year, type])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id          String      @id @default(cuid())
+  type        LeaveType
+  status      LeaveStatus @default(PENDING)
+  startDate   DateTime
+  endDate     DateTime
+  days        Int
+  reason      String      @db.Text
+  approvedBy  String?     // EverSense user ID of approver
+  approvedAt  DateTime?
+  rejectedBy  String?
+  rejectedAt  DateTime?
+  notes       String?     @db.Text
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  employeeId  String
+  employee    EmployeeProfile @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([startDate, endDate])
+  @@map("leave_requests")
+}
+
+// ─── Payroll ──────────────────────────────────────────────────────────────────
+
+enum PayrollStatus {
+  DRAFT
+  PROCESSED
+  PAID
+}
+
+model PayrollRecord {
+  id            String        @id @default(cuid())
+  period        String        // "2026-02"
+  baseSalary    Float
+  overtimePay   Float         @default(0)
+  bonus         Float         @default(0)
+  deductions    Float         @default(0)
+  taxAmount     Float         @default(0)
+  netPay        Float
+  hoursWorked   Float
+  overtimeHours Float         @default(0)
+  status        PayrollStatus @default(DRAFT)
+  paidAt        DateTime?
+  notes         String?       @db.Text
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Snapshot from EverSense at time of processing
+  esHoursLogged  Float        @default(0)
+  esTasksCompleted Int        @default(0)
+
+  employeeId  String
+  employee    EmployeeProfile @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, period])
+  @@index([period])
+  @@index([status])
+  @@map("payroll_records")
+}
+
+// ─── HR Settings ─────────────────────────────────────────────────────────────
+
+model HrSettings {
+  id                String  @id @default(cuid())
+  orgId             String  @unique // EverSense org ID this HR instance manages
+  eversenseApiUrl   String
+  overtimeThreshold Int     @default(40) // weekly hours before OT
+  workingHoursPerDay Int    @default(8)
+  currency          String  @default("USD")
+  fiscalYearStart   Int     @default(1) // month (1=January)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("hr_settings")
+}
