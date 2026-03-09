@@ -13,9 +13,11 @@ router.get('/', async (req, res) => {
     const { orgId, startDate, endDate, userId } = req.query
     if (!orgId) return res.status(400).json({ error: 'orgId required' })
 
+    const token = req.headers.authorization?.replace('Bearer ', '') || ''
+
     const [timeLogs, members] = await Promise.all([
-      getTimeLogs(orgId, { startDate, endDate, userId }),
-      getOrgMembers(orgId),
+      getTimeLogs(orgId, { startDate, endDate, userId }, token),
+      getOrgMembers(orgId, token),
     ])
 
     const logs = timeLogs?.data ?? timeLogs ?? []
