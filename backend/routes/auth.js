@@ -32,6 +32,15 @@ router.post('/login', async (req, res) => {
     const user = data?.user
     const token = data?.session?.token || data?.token || ''
 
+    // Capture the Set-Cookie header from sign-in response to forward to organizations
+    const setCookieHeader = response.headers['set-cookie']
+    const cookieString = Array.isArray(setCookieHeader)
+      ? setCookieHeader.map(c => c.split(';')[0]).join('; ')
+      : (setCookieHeader ?? '').split(';')[0]
+
+    console.log('[auth] token:', token ? token.slice(0, 20) + '...' : '(empty)')
+    console.log('[auth] set-cookie:', cookieString ? cookieString.slice(0, 100) : '(none)')
+
     if (!user) {
       return res.status(401).json({ error: 'Login failed' })
     }
@@ -40,8 +49,8 @@ router.post('/login', async (req, res) => {
     try {
       const orgRes = await axios.get(`${eversenseUrl}/api/organizations`, {
         headers: {
-          Cookie: `better-auth.session_token=${token}`,
-          Authorization: `Bearer ${token}`,
+          ...(cookieString ? { Cookie: cookieString } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         timeout: 5000,
         validateStatus: () => true,
