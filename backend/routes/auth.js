@@ -36,6 +36,24 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Login failed' })
     }
 
+    // Check role — only OWNER and ADMIN can access HR-Sense
+    try {
+      const orgRes = await axios.get(`${eversenseUrl}/api/organizations`, {
+        headers: { Cookie: `better-auth.session_token=${token}` },
+        timeout: 5000,
+        validateStatus: () => true,
+      })
+      const orgs = orgRes.data?.organizations ?? []
+      const role = orgs[0]?.role?.toUpperCase() ?? ''
+      if (!['OWNER', 'ADMIN'].includes(role)) {
+        return res.status(403).json({ error: 'Access denied. Only Owner or Admin can access HR-Sense.' })
+      }
+      user.role = role
+    } catch {
+      // If we can't verify role, deny access to be safe
+      return res.status(403).json({ error: 'Could not verify user role. Access denied.' })
+    }
+
     return res.json({ user, token })
   } catch (err) {
     console.error('Auth proxy error:', err.message)
