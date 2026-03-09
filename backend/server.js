@@ -41,6 +41,70 @@ app.use((req, _res, next) => {
 // ─── Debug: probe EverSense API structure ─────────────────────────────────────
 // Visit /api/debug/eversense?orgId=xxx  (requires Authorization: Bearer <token>)
 
+app.get('/api/debug/service-auth', async (req, res) => {
+  const axios = (await import('axios')).default
+  const base = process.env.EVERSENSE_API_URL || 'https://eversense-ai.up.railway.app'
+  const email = process.env.EVERSENSE_SERVICE_EMAIL
+  const password = process.env.EVERSENSE_SERVICE_PASSWORD
+  const { orgId } = req.query
+
+  const result = {
+    env: {
+      EVERSENSE_API_URL: base,
+      EVERSENSE_SERVICE_EMAIL: email || '(not set)',
+      EVERSENSE_SERVICE_PASSWORD: password ? '(set, ' + password.length + ' chars)' : '(not set)',
+    },
+    login: null,
+    members: null,
+    timers: null,
+  }
+
+  if (!email || !password) {
+    return res.json({ ...result, error: 'Missing env vars' })
+  }
+
+  try {
+    const loginRes = await axios.post(`${base}/api/auth/sign-in/email`, { email, password }, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000,
+      validateStatus: () => true,
+    })
+    const setCookie = loginRes.headers['set-cookie'] ?? []
+    const allCookies = Array.isArray(setCookie) ? setCookie : [setCookie]
+    const authCookie = allCookies.find(c => c.includes('better-auth.session_token='))
+    const token = authCookie
+      ? authCookie.split(';')[0].replace('better-auth.session_token=', '').trim()
+      : (loginRes.data?.session?.token || loginRes.data?.token || null)
+
+    result.login = {
+      status: loginRes.status,
+      user: loginRes.data?.user ?? null,
+      tokenExtracted: token ? token.slice(0, 20) + '...' : null,
+      setCookieHeaders: allCookies.map(c => c.split(';')[0]).join(' | '),
+    }
+
+    if (token && orgId) {
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        Cookie: `better-auth.session_token=${token}`,
+      }
+      const membersRes = await axios.get(`${base}/api/organizations/${orgId}/members`, {
+        headers, timeout: 8000, validateStatus: () => true,
+      })
+      result.members = { status: membersRes.status, data: membersRes.data }
+
+      const timersRes = await axios.get(`${base}/api/timers`, {
+        params: { orgId }, headers, timeout: 8000, validateStatus: () => true,
+      })
+      result.timers = { status: timersRes.status, data: timersRes.data }
+    }
+  } catch (e) {
+    result.error = e.message
+  }
+
+  res.json(result)
+})
+
 app.get('/api/debug/eversense', async (req, res) => {
   const axios = (await import('axios')).default
   const base = process.env.EVERSENSE_API_URL || 'https://eversense-ai.up.railway.app'
