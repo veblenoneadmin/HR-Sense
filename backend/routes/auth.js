@@ -30,16 +30,23 @@ router.post('/login', async (req, res) => {
     const data = response.data
     // better-auth returns { user: {...}, session: { token: '...' } }
     const user = data?.user
-    const token = data?.session?.token || data?.token || ''
 
-    // Capture the Set-Cookie header from sign-in response to forward to organizations
+    // Extract the actual cookie token from Set-Cookie header — this is what EverSense validates.
+    // session.token in the response body may differ from the cookie value.
     const setCookieHeader = response.headers['set-cookie']
-    const cookieString = Array.isArray(setCookieHeader)
-      ? setCookieHeader.map(c => c.split(';')[0]).join('; ')
-      : (setCookieHeader ?? '').split(';')[0]
+    const allCookies = Array.isArray(setCookieHeader) ? setCookieHeader : (setCookieHeader ? [setCookieHeader] : [])
+    const authCookie = allCookies.find(c => c.includes('better-auth.session_token='))
+    const cookieToken = authCookie
+      ? authCookie.split(';')[0].replace('better-auth.session_token=', '').trim()
+      : (data?.session?.token || data?.token || '')
+    // cookieString to forward on the role-check request
+    const cookieString = allCookies.map(c => c.split(';')[0]).join('; ')
 
-    console.log('[auth] token:', token ? token.slice(0, 20) + '...' : '(empty)')
-    console.log('[auth] set-cookie:', cookieString ? cookieString.slice(0, 100) : '(none)')
+    // The token we store on the frontend MUST be the cookie value so we can reconstruct it later
+    const token = cookieToken
+
+    console.log('[auth] cookie token:', token ? token.slice(0, 20) + '...' : '(empty)')
+    console.log('[auth] set-cookie raw:', cookieString ? cookieString.slice(0, 150) : '(none)')
 
     if (!user) {
       return res.status(401).json({ error: 'Login failed' })
