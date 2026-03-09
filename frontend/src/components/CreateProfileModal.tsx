@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Save, UserPlus } from "lucide-react";
+import { X, UserPlus } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { employeesApi, departmentsApi, EmployeeRow, DepartmentRow } from "@/lib/api";
 
