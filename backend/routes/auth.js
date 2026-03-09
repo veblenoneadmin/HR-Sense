@@ -36,13 +36,16 @@ router.post('/login', async (req, res) => {
     const setCookieHeader = response.headers['set-cookie']
     const allCookies = Array.isArray(setCookieHeader) ? setCookieHeader : (setCookieHeader ? [setCookieHeader] : [])
     const authCookie = allCookies.find(c => c.includes('better-auth.session_token='))
-    const cookieToken = authCookie
-      ? authCookie.split(';')[0].replace('better-auth.session_token=', '').trim()
+    // cookiePart = "CookieName=Value" e.g. "__Secure-better-auth.session_token=VALUE"
+    const cookiePart = authCookie ? authCookie.split(';')[0].trim() : null
+    // token = just the value after the first "=" (strips __Secure- prefix)
+    const cookieToken = cookiePart
+      ? cookiePart.split('=').slice(1).join('=')
       : (data?.session?.token || data?.token || '')
-    // cookieString to forward on the role-check request
+    // cookieString to forward on the role-check request (use full cookiePart)
     const cookieString = allCookies.map(c => c.split(';')[0]).join('; ')
 
-    // The token we store on the frontend MUST be the cookie value so we can reconstruct it later
+    // The token we store on the frontend is the raw value (not the cookie name prefix)
     const token = cookieToken
 
     console.log('[auth] cookie token:', token ? token.slice(0, 20) + '...' : '(empty)')
