@@ -6,7 +6,7 @@
 import axios from 'axios'
 
 const client = axios.create({
-  baseURL: process.env.EVERSENSE_API_URL,
+  baseURL: process.env.EVERSENSE_API_URL || 'https://eversense-ai.up.railway.app',
   headers: {
     'Content-Type': 'application/json',
     ...(process.env.EVERSENSE_API_KEY && {
