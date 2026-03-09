@@ -38,11 +38,23 @@ router.get('/', async (req, res) => {
         lastLoginAt: user.lastLoginAt,
         createdAt: user.createdAt,
         // HR-Sense enrichment
+        profileId: profile?.id ?? null,
         employeeCode: profile?.employeeCode ?? null,
         title: profile?.title ?? null,
         department: profile?.department?.name ?? null,
+        departmentId: profile?.departmentId ?? null,
         baseSalary: profile?.baseSalary ?? null,
+        ratePerHour: profile?.ratePerHour ?? null,
+        currency: profile?.currency ?? 'PHP',
         startDate: profile?.startDate ?? null,
+        sssNumber: profile?.sssNumber ?? null,
+        sssContribution: profile?.sssContribution ?? null,
+        philHealthNumber: profile?.philHealthNumber ?? null,
+        philHealthContribution: profile?.philHealthContribution ?? null,
+        pagIbigNumber: profile?.pagIbigNumber ?? null,
+        pagIbigContribution: profile?.pagIbigContribution ?? null,
+        hasHealthCard: profile?.hasHealthCard ?? false,
+        healthCardProvider: profile?.healthCardProvider ?? null,
       }
     })
 

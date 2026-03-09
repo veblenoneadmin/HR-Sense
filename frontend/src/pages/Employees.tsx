@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { employeesApi, performanceApi, getOrgId, EmployeeRow, KpiMetric } from "@/lib/api";
+import EmployeeDetailModal from "@/components/EmployeeDetailModal";
 
 const ROLE_COLORS: Record<string, "default" | "success" | "destructive" | "warning" | "secondary" | "outline"> = {
   OWNER: "destructive", ADMIN: "warning", MANAGER: "default",
@@ -21,6 +22,7 @@ export default function EmployeesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<EmployeeRow | null>(null);
 
   useEffect(() => {
     const orgId = getOrgId();
@@ -92,7 +94,7 @@ export default function EmployeesPage() {
         {filtered.map((user) => {
           const perf = perfMap[user.id];
           return (
-            <Card key={user.id} className="hover:shadow-md transition-shadow cursor-pointer">
+            <Card key={user.id} className="hover:shadow-md transition-shadow cursor-pointer" onDoubleClick={() => setSelected(user)}>
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-3">
                   <Avatar name={user.name} size="lg" />
@@ -149,8 +151,20 @@ export default function EmployeesPage() {
 
       <div className="flex items-center gap-2 text-xs text-gray-400">
         <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-        <span>Employee data sourced from EverSense · {employees.length} members</span>
+        <span>Employee data sourced from EverSense · {employees.length} members · Double-click a card to view details</span>
       </div>
+
+      {selected && (
+        <EmployeeDetailModal
+          employee={selected}
+          perf={perfMap[selected.id]}
+          onClose={() => setSelected(null)}
+          onSaved={(updated) => {
+            setEmployees((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+            setSelected(updated);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -31,11 +31,24 @@ model EmployeeProfile {
   employeeCode String   @unique
   title        String
   baseSalary   Float    @default(0)
-  currency     String   @default("USD")
+  ratePerHour  Float?   // optional manual override; if null, computed from baseSalary
+  currency     String   @default("PHP")
   startDate    DateTime
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // Government-mandated contributions (PHP amounts)
+  sssNumber            String?
+  sssContribution      Float   @default(0)
+  philHealthNumber     String?
+  philHealthContribution Float @default(0)
+  pagIbigNumber        String?
+  pagIbigContribution  Float   @default(0)
+
+  // Health card / HMO
+  hasHealthCard        Boolean @default(false)
+  healthCardProvider   String?
 
   departmentId String
   department   Department @relation(fields: [departmentId], references: [id])

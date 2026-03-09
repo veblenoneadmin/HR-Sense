@@ -39,6 +39,7 @@ const patch = <T>(path: string, body?: unknown) => request<T>(path, { method: 'P
 export const employeesApi = {
   list: (orgId: string) => get<{ employees: EmployeeRow[] }>(`/employees?orgId=${orgId}`),
   get: (esUserId: string) => get<{ profile: EmployeeProfileDetail }>(`/employees/${esUserId}`),
+  update: (profileId: string, body: Partial<EmployeeRow>) => patch<{ profile: EmployeeProfileDetail }>(`/employees/${profileId}`, body),
 }
 
 // ─── Attendance ───────────────────────────────────────────────────────────────
@@ -105,11 +106,23 @@ export interface EmployeeRow {
   isActive: boolean
   lastLoginAt?: string
   createdAt: string
+  profileId?: string
   employeeCode?: string
   title?: string
   department?: string
+  departmentId?: string
   baseSalary?: number
+  ratePerHour?: number
+  currency?: string
   startDate?: string
+  sssNumber?: string
+  sssContribution?: number
+  philHealthNumber?: string
+  philHealthContribution?: number
+  pagIbigNumber?: string
+  pagIbigContribution?: number
+  hasHealthCard?: boolean
+  healthCardProvider?: string
 }
 
 export interface EmployeeProfileDetail {
