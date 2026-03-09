@@ -10,17 +10,18 @@ const BASE_URL = process.env.EVERSENSE_API_URL || 'https://eversense-ai.up.railw
 // ─── Service-account session cache ────────────────────────────────────────────
 
 let _cachedToken = null
+let _cachedCookie = null  // full "CookieName=Value" string to forward as-is
 let _tokenExpiry = 0
 
-async function getServiceToken() {
-  if (_cachedToken && Date.now() < _tokenExpiry) return _cachedToken
+async function getServiceSession() {
+  if (_cachedToken && Date.now() < _tokenExpiry) return { token: _cachedToken, cookie: _cachedCookie }
 
   const email = process.env.EVERSENSE_SERVICE_EMAIL
   const password = process.env.EVERSENSE_SERVICE_PASSWORD
 
   if (!email || !password) {
     console.warn('[eversense] EVERSENSE_SERVICE_EMAIL / PASSWORD not set — unauthenticated requests will likely fail')
-    return null
+    return { token: null, cookie: null }
   }
 
   console.log('[eversense] signing in service account:', email)
@@ -32,41 +33,48 @@ async function getServiceToken() {
 
   if (res.status >= 400) {
     console.error('[eversense] service account login failed:', res.status, res.data)
-    return null
+    return { token: null, cookie: null }
   }
 
-  // Extract the cookie token (same logic as auth.js)
+  // EverSense uses __Secure-better-auth.session_token on Railway (HTTPS)
+  // Extract the full "Name=Value" cookie part so we can forward it exactly
   const setCookieHeader = res.headers['set-cookie']
   const allCookies = Array.isArray(setCookieHeader) ? setCookieHeader : (setCookieHeader ? [setCookieHeader] : [])
   const authCookie = allCookies.find(c => c.includes('better-auth.session_token='))
-  const token = authCookie
-    ? authCookie.split(';')[0].replace('better-auth.session_token=', '').trim()
+
+  // cookiePart = "CookieName=Value" (before the first semicolon)
+  const cookiePart = authCookie ? authCookie.split(';')[0].trim() : null
+  // token = just the value (after the first "=")
+  const token = cookiePart
+    ? cookiePart.split('=').slice(1).join('=')
     : (res.data?.session?.token || res.data?.token || null)
 
   if (!token) {
     console.error('[eversense] service account login: no token in response')
-    return null
+    return { token: null, cookie: null }
   }
 
   _cachedToken = token
+  _cachedCookie = cookiePart  // e.g. "__Secure-better-auth.session_token=VALUE"
   _tokenExpiry = Date.now() + 22 * 60 * 60 * 1000 // refresh every 22 hours
   console.log('[eversense] service account session acquired:', token.slice(0, 20) + '...')
-  return token
+  return { token, cookie: cookiePart }
 }
 
 // ─── HTTP helper ──────────────────────────────────────────────────────────────
 
 async function esGet(path, params) {
-  const token = await getServiceToken()
-  const headers = { 'Content-Type': 'application/json' }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-    headers['Cookie'] = `better-auth.session_token=${token}`
+  let { token, cookie } = await getServiceSession()
+  const buildHeaders = (t, c) => {
+    const h = { 'Content-Type': 'application/json' }
+    if (t) h['Authorization'] = `Bearer ${t}`
+    if (c) h['Cookie'] = c
+    return h
   }
 
   const res = await axios.get(`${BASE_URL}${path}`, {
     params,
-    headers,
+    headers: buildHeaders(token, cookie),
     timeout: 10000,
     validateStatus: () => true,
   })
@@ -75,12 +83,16 @@ async function esGet(path, params) {
     // Token may have expired — invalidate cache and retry once
     console.warn('[eversense] 401 on', path, '— invalidating session cache and retrying')
     _cachedToken = null
+    _cachedCookie = null
     _tokenExpiry = 0
-    const fresh = await getServiceToken()
-    if (!fresh) return null
-    headers['Authorization'] = `Bearer ${fresh}`
-    headers['Cookie'] = `better-auth.session_token=${fresh}`
-    const retry = await axios.get(`${BASE_URL}${path}`, { params, headers, timeout: 10000, validateStatus: () => true })
+    const fresh = await getServiceSession()
+    if (!fresh.token) return null
+    const retry = await axios.get(`${BASE_URL}${path}`, {
+      params,
+      headers: buildHeaders(fresh.token, fresh.cookie),
+      timeout: 10000,
+      validateStatus: () => true,
+    })
     if (retry.status >= 400) {
       console.error(`[eversense] ${path} → ${retry.status}`, JSON.stringify(retry.data).slice(0, 200))
     }
@@ -106,11 +118,11 @@ export async function getUser(userId) {
 // ─── Time Logs ────────────────────────────────────────────────────────────────
 
 export async function getTimeLogs(orgId, params = {}) {
-  return esGet(`/api/timers`, { orgId, ...params })
+  return esGet(`/api/time-logs`, { orgId, ...params })
 }
 
 export async function getUserTimeLogs(userId, params = {}) {
-  return esGet(`/api/timers`, { userId, ...params })
+  return esGet(`/api/time-logs`, { userId, ...params })
 }
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────

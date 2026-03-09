@@ -93,10 +93,13 @@ app.get('/api/debug/service-auth', async (req, res) => {
       })
       result.members = { status: membersRes.status, data: membersRes.data }
 
-      const timersRes = await axios.get(`${base}/api/timers`, {
-        params: { orgId }, headers, timeout: 8000, validateStatus: () => true,
-      })
-      result.timers = { status: timersRes.status, data: timersRes.data }
+      // Probe multiple possible time-log endpoints
+      for (const ep of ['/api/time-logs', '/api/timelogs', '/api/timers', '/api/time-entries']) {
+        const r = await axios.get(`${base}${ep}`, {
+          params: { orgId }, headers, timeout: 8000, validateStatus: () => true,
+        })
+        result[`timers_probe${ep}`] = { status: r.status, sample: JSON.stringify(r.data).slice(0, 200) }
+      }
     }
   } catch (e) {
     result.error = e.message
