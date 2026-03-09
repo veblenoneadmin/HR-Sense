@@ -38,6 +38,37 @@ app.use((req, _res, next) => {
   next()
 })
 
+// ─── Debug: probe EverSense API structure ─────────────────────────────────────
+// Visit /api/debug/eversense?orgId=xxx  (requires Authorization: Bearer <token>)
+
+app.get('/api/debug/eversense', async (req, res) => {
+  const axios = (await import('axios')).default
+  const base = process.env.EVERSENSE_API_URL || 'https://eversense-ai.up.railway.app'
+  const token = req.headers.authorization?.replace('Bearer ', '') || ''
+  const { orgId } = req.query
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}`, Cookie: `better-auth.session_token=${token}` }),
+  }
+  const probe = async (path) => {
+    try {
+      const r = await axios.get(`${base}${path}`, { headers, timeout: 8000, validateStatus: () => true })
+      return { status: r.status, data: r.data }
+    } catch (e) {
+      return { error: e.message }
+    }
+  }
+  const results = {}
+  results['/api/organizations'] = await probe('/api/organizations')
+  if (orgId) {
+    results[`/api/organizations/${orgId}/members`] = await probe(`/api/organizations/${orgId}/members`)
+    results[`/api/organizations/${orgId}`] = await probe(`/api/organizations/${orgId}`)
+  }
+  results['/api/auth/get-session'] = await probe('/api/auth/get-session')
+  results['/api/timers'] = await probe('/api/timers' + (orgId ? `?orgId=${orgId}` : ''))
+  res.json(results)
+})
+
 // ─── Health ────────────────────────────────────────────────────────────────────
 
 app.get('/health', async (req, res) => {
