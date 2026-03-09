@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
-import { Search, Filter, UserPlus, Mail, Shield, Circle } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Search, Filter, UserPlus, Mail, Shield, Circle, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { employeesApi, performanceApi, getOrgId, EmployeeRow, KpiMetric } from "@/lib/api";
 import EmployeeDetailModal from "@/components/EmployeeDetailModal";
+import CreateProfileModal from "@/components/CreateProfileModal";
 
 const ROLE_COLORS: Record<string, "default" | "success" | "destructive" | "warning" | "secondary" | "outline"> = {
   OWNER: "destructive", ADMIN: "warning", MANAGER: "default",
@@ -16,6 +17,81 @@ function currentPeriod() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function CardMenu({ user, onEdit, onCreate, onDelete }: {
+  user: EmployeeRow;
+  onEdit: () => void;
+  onCreate: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative" onClick={e => e.stopPropagation()}>
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        className="p-1 rounded-md transition-colors"
+        style={{ color: '#6e6e6e' }}
+        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#3c3c3c'; e.currentTarget.style.color = '#cccccc'; }}
+        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#6e6e6e'; }}
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 mt-1 w-44 rounded-lg overflow-hidden z-20"
+          style={{ backgroundColor: '#2d2d2d', border: '1px solid #3c3c3c', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}
+        >
+          {user.profileId ? (
+            <>
+              <button
+                onClick={() => { setOpen(false); onEdit(); }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left transition-colors"
+                style={{ color: '#cccccc' }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#3c3c3c')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <Pencil className="w-3.5 h-3.5" style={{ color: '#7dbfff' }} />
+                Edit Profile
+              </button>
+              <button
+                onClick={() => { setOpen(false); onDelete(); }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left transition-colors"
+                style={{ color: '#f44747' }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(244,71,71,0.1)')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete Profile
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => { setOpen(false); onCreate(); }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left transition-colors"
+              style={{ color: '#cccccc' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#3c3c3c')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <UserPlus className="w-3.5 h-3.5" style={{ color: '#81c784' }} />
+              Create Profile
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [metrics, setMetrics] = useState<KpiMetric[]>([]);
@@ -23,6 +99,7 @@ export default function EmployeesPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<EmployeeRow | null>(null);
+  const [creating, setCreating] = useState<EmployeeRow | null>(null);
 
   useEffect(() => {
     const orgId = getOrgId();
@@ -33,6 +110,19 @@ export default function EmployeesPage() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleDelete(user: EmployeeRow) {
+    if (!user.profileId) return;
+    if (!confirm(`Delete HR profile for ${user.name}? This cannot be undone.`)) return;
+    try {
+      await employeesApi.deleteProfile(user.profileId);
+      setEmployees(prev => prev.map(e => e.id === user.id
+        ? { ...e, profileId: undefined, employeeCode: undefined, title: undefined, department: undefined, departmentId: undefined, baseSalary: undefined, ratePerHour: undefined, startDate: undefined, sssNumber: undefined, sssContribution: undefined, philHealthNumber: undefined, philHealthContribution: undefined, pagIbigNumber: undefined, pagIbigContribution: undefined, hasHealthCard: undefined, healthCardProvider: undefined }
+        : e));
+    } catch (e: any) {
+      alert(e.message ?? "Delete failed");
+    }
+  }
 
   if (loading) return <div className="p-6 text-sm" style={{ color: '#858585' }}>Loading employees...</div>;
   if (error) return <div className="p-6 text-sm text-red-400">Error: {error}</div>;
@@ -102,7 +192,15 @@ export default function EmployeesPage() {
                 <div className="flex items-start justify-between mb-3">
                   <Avatar name={user.name} size="lg" />
                   <div className="flex flex-col items-end gap-1">
-                    <Badge variant={ROLE_COLORS[user.role] ?? "secondary"}>{user.role}</Badge>
+                    <div className="flex items-center gap-1">
+                      <Badge variant={ROLE_COLORS[user.role] ?? "secondary"}>{user.role}</Badge>
+                      <CardMenu
+                        user={user}
+                        onEdit={() => setSelected(user)}
+                        onCreate={() => setCreating(user)}
+                        onDelete={() => handleDelete(user)}
+                      />
+                    </div>
                     <div className="flex items-center gap-1">
                       <Circle className={`w-2 h-2 ${user.isActive ? "text-green-400 fill-green-400" : "fill-current"}`} style={user.isActive ? {} : { color: '#6e6e6e' }} />
                       <span className="text-xs" style={{ color: '#858585' }}>{user.isActive ? "Active" : "Inactive"}</span>
@@ -154,7 +252,7 @@ export default function EmployeesPage() {
 
       <div className="flex items-center gap-2 text-xs" style={{ color: '#6e6e6e' }}>
         <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-        <span>Employee data sourced from EverSense · {employees.length} members · Double-click a card to view details</span>
+        <span>Employee data sourced from EverSense · {employees.length} members · Double-click a card to view/edit profile</span>
       </div>
 
       {selected && (
@@ -165,6 +263,17 @@ export default function EmployeesPage() {
           onSaved={(updated) => {
             setEmployees((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
             setSelected(updated);
+          }}
+        />
+      )}
+
+      {creating && (
+        <CreateProfileModal
+          employee={creating}
+          onClose={() => setCreating(null)}
+          onCreated={(updated) => {
+            setEmployees((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+            setCreating(null);
           }}
         />
       )}

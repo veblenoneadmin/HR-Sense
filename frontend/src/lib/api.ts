@@ -40,6 +40,8 @@ export const employeesApi = {
   list: (orgId: string) => get<{ employees: EmployeeRow[] }>(`/employees?orgId=${orgId}`),
   get: (esUserId: string) => get<{ profile: EmployeeProfileDetail }>(`/employees/${esUserId}`),
   update: (profileId: string, body: Partial<EmployeeRow>) => patch<{ profile: EmployeeProfileDetail }>(`/employees/${profileId}`, body),
+  create: (body: CreateEmployeeProfileRequest) => post<{ profile: EmployeeProfileDetail }>('/employees', body),
+  deleteProfile: (profileId: string) => request<{ success: boolean }>(`/employees/${profileId}`, { method: 'DELETE' }),
 }
 
 // ─── Attendance ───────────────────────────────────────────────────────────────
@@ -230,6 +232,16 @@ export interface PayrollRecordRow {
 export interface PayrollListResponse {
   records: PayrollRecordRow[]
   summary: { totalGross: number; totalNet: number; totalDeductions: number; count: number }
+}
+
+export interface CreateEmployeeProfileRequest {
+  esUserId: string
+  employeeCode: string
+  title: string
+  baseSalary?: number
+  currency?: string
+  startDate: string
+  departmentId: string
 }
 
 export interface DepartmentRow {

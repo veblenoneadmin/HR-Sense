@@ -112,4 +112,14 @@ router.patch('/:id', async (req, res) => {
   }
 })
 
+// DELETE /api/employees/:id  — delete HR profile by profile id
+router.delete('/:id', async (req, res) => {
+  try {
+    await prisma.employeeProfile.delete({ where: { id: req.params.id } })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 export default router
