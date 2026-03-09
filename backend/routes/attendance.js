@@ -3,7 +3,7 @@
  * Proxies time log data from EverSense and computes attendance summaries.
  */
 import { Router } from 'express'
-import { getTimeLogs, getOrgMembers } from '../lib/eversense.js'
+import { getAttendanceLogs, getOrgMembers } from '../lib/eversense.js'
 
 const router = Router()
 
@@ -14,11 +14,11 @@ router.get('/', async (req, res) => {
     if (!orgId) return res.status(400).json({ error: 'orgId required' })
 
     const [timeLogs, members] = await Promise.all([
-      getTimeLogs(orgId, { startDate, endDate, userId }),
+      getAttendanceLogs(orgId, { startDate, endDate, userId }),
       getOrgMembers(orgId),
     ])
 
-    const logs = timeLogs?.data ?? timeLogs ?? []
+    const logs = timeLogs?.data ?? timeLogs?.logs ?? timeLogs ?? []
     const users = (members?.members ?? members ?? []).map(m => m.user ?? m)
 
     // Aggregate by user

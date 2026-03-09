@@ -72,33 +72,36 @@ app.get('/api/debug/service-auth', async (req, res) => {
     const setCookie = loginRes.headers['set-cookie'] ?? []
     const allCookies = Array.isArray(setCookie) ? setCookie : [setCookie]
     const authCookie = allCookies.find(c => c.includes('better-auth.session_token='))
-    const token = authCookie
-      ? authCookie.split(';')[0].replace('better-auth.session_token=', '').trim()
+    // cookiePart = "CookieName=Value" (e.g. "__Secure-better-auth.session_token=VALUE")
+    const cookiePart = authCookie ? authCookie.split(';')[0].trim() : null
+    // token = just the value after the first "="
+    const token = cookiePart
+      ? cookiePart.split('=').slice(1).join('=')
       : (loginRes.data?.session?.token || loginRes.data?.token || null)
 
     result.login = {
       status: loginRes.status,
       user: loginRes.data?.user ?? null,
+      cookiePart: cookiePart ? cookiePart.slice(0, 50) + '...' : null,
       tokenExtracted: token ? token.slice(0, 20) + '...' : null,
-      setCookieHeaders: allCookies.map(c => c.split(';')[0]).join(' | '),
     }
 
     if (token && orgId) {
       const headers = {
         Authorization: `Bearer ${token}`,
-        Cookie: `better-auth.session_token=${token}`,
+        Cookie: cookiePart,
       }
       const membersRes = await axios.get(`${base}/api/organizations/${orgId}/members`, {
         headers, timeout: 8000, validateStatus: () => true,
       })
       result.members = { status: membersRes.status, data: membersRes.data }
 
-      // Probe multiple possible time-log endpoints
-      for (const ep of ['/api/time-logs', '/api/timelogs', '/api/timers', '/api/time-entries']) {
+      // Probe correct EverSense time-log endpoints
+      for (const ep of ['/api/timers/recent', '/api/timers/team', '/api/attendance/logs', '/api/user-reports']) {
         const r = await axios.get(`${base}${ep}`, {
           params: { orgId }, headers, timeout: 8000, validateStatus: () => true,
         })
-        result[`timers_probe${ep}`] = { status: r.status, sample: JSON.stringify(r.data).slice(0, 200) }
+        result[`probe_${ep.replace(/\//g, '_')}`] = { status: r.status, sample: JSON.stringify(r.data).slice(0, 300) }
       }
     }
   } catch (e) {

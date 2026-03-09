@@ -36,15 +36,13 @@ async function getServiceSession() {
     return { token: null, cookie: null }
   }
 
-  // EverSense uses __Secure-better-auth.session_token on Railway (HTTPS)
-  // Extract the full "Name=Value" cookie part so we can forward it exactly
+  // EverSense on Railway uses __Secure-better-auth.session_token (HTTPS prefix)
+  // cookiePart = full "CookieName=Value" before the semicolon
   const setCookieHeader = res.headers['set-cookie']
   const allCookies = Array.isArray(setCookieHeader) ? setCookieHeader : (setCookieHeader ? [setCookieHeader] : [])
   const authCookie = allCookies.find(c => c.includes('better-auth.session_token='))
-
-  // cookiePart = "CookieName=Value" (before the first semicolon)
   const cookiePart = authCookie ? authCookie.split(';')[0].trim() : null
-  // token = just the value (after the first "=")
+  // token = value only (everything after the first "=")
   const token = cookiePart
     ? cookiePart.split('=').slice(1).join('=')
     : (res.data?.session?.token || res.data?.token || null)
@@ -56,21 +54,22 @@ async function getServiceSession() {
 
   _cachedToken = token
   _cachedCookie = cookiePart  // e.g. "__Secure-better-auth.session_token=VALUE"
-  _tokenExpiry = Date.now() + 22 * 60 * 60 * 1000 // refresh every 22 hours
-  console.log('[eversense] service account session acquired:', token.slice(0, 20) + '...')
+  _tokenExpiry = Date.now() + 22 * 60 * 60 * 1000
+  console.log('[eversense] service account session acquired, cookie:', cookiePart?.slice(0, 40) + '...')
   return { token, cookie: cookiePart }
 }
 
 // ─── HTTP helper ──────────────────────────────────────────────────────────────
 
+function buildHeaders(token, cookie) {
+  const h = { 'Content-Type': 'application/json' }
+  if (token) h['Authorization'] = `Bearer ${token}`
+  if (cookie) h['Cookie'] = cookie
+  return h
+}
+
 async function esGet(path, params) {
   let { token, cookie } = await getServiceSession()
-  const buildHeaders = (t, c) => {
-    const h = { 'Content-Type': 'application/json' }
-    if (t) h['Authorization'] = `Bearer ${t}`
-    if (c) h['Cookie'] = c
-    return h
-  }
 
   const res = await axios.get(`${BASE_URL}${path}`, {
     params,
@@ -80,7 +79,6 @@ async function esGet(path, params) {
   })
 
   if (res.status === 401) {
-    // Token may have expired — invalidate cache and retry once
     console.warn('[eversense] 401 on', path, '— invalidating session cache and retrying')
     _cachedToken = null
     _cachedCookie = null
@@ -116,19 +114,24 @@ export async function getUser(userId) {
 }
 
 // ─── Time Logs ────────────────────────────────────────────────────────────────
+// EverSense endpoints: /api/timers/recent (all entries), /api/timers/team (grouped by member)
 
 export async function getTimeLogs(orgId, params = {}) {
-  return esGet(`/api/time-logs`, { orgId, ...params })
+  return esGet(`/api/timers/recent`, { orgId, ...params })
 }
 
 export async function getUserTimeLogs(userId, params = {}) {
-  return esGet(`/api/time-logs`, { userId, ...params })
+  return esGet(`/api/timers/recent`, { userId, ...params })
+}
+
+export async function getTeamTimerStats(orgId, params = {}) {
+  return esGet(`/api/timers/team`, { orgId, ...params })
 }
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
 export async function getTasks(orgId, params = {}) {
-  return esGet(`/api/tasks`, { orgId, ...params })
+  return esGet(`/api/tasks/org/${orgId}`, params)
 }
 
 export async function getUserTasks(userId, params = {}) {
@@ -144,13 +147,13 @@ export async function getProjects(orgId) {
 // ─── Reports / KPIs ───────────────────────────────────────────────────────────
 
 export async function getReports(orgId, params = {}) {
-  return esGet(`/api/reports`, { orgId, ...params })
+  return esGet(`/api/user-reports`, { orgId, ...params })
 }
 
 // ─── Attendance ───────────────────────────────────────────────────────────────
 
-export async function getAttendance(orgId, params = {}) {
-  return esGet(`/api/attendance`, { orgId, ...params })
+export async function getAttendanceLogs(orgId, params = {}) {
+  return esGet(`/api/attendance/logs`, { orgId, ...params })
 }
 
 // ─── KPI aggregation ─────────────────────────────────────────────────────────
@@ -163,13 +166,18 @@ export async function buildKpiForUser(userId, period) {
     getReports(null, { userId, startDate, endDate }),
   ])
 
-  const hoursLogged = (timeLogs?.data ?? timeLogs ?? [])
-    .reduce((sum, t) => sum + (t.duration ?? 0), 0) / 60
+  const logs = timeLogs?.data ?? timeLogs ?? []
+  const hoursLogged = Array.isArray(logs)
+    ? logs.reduce((sum, t) => sum + (t.duration ?? t.durationMinutes ?? 0), 0) / 60
+    : 0
 
-  const completedTasks = (tasks?.data ?? tasks ?? [])
-    .filter(t => t.status === 'DONE' || t.status === 'completed').length
+  const taskList = tasks?.data ?? tasks?.tasks ?? tasks ?? []
+  const completedTasks = Array.isArray(taskList)
+    ? taskList.filter(t => t.status === 'DONE' || t.status === 'completed' || t.status === 'done').length
+    : 0
 
-  const reportsCount = Array.isArray(reports?.data ?? reports) ? (reports?.data ?? reports).length : 0
+  const reportList = reports?.data ?? reports?.reports ?? reports ?? []
+  const reportsCount = Array.isArray(reportList) ? reportList.length : 0
 
   const AVG_HOURS = 48.19
   const AVG_TASKS = 3.5
