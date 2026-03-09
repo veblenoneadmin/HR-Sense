@@ -191,13 +191,11 @@ export default function EmployeesPage() {
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-3">
                   <Avatar name={user.name} size="lg" />
-                  <div className="flex items-start gap-1">
-                    <div className="flex flex-col items-end gap-1">
-                      <Badge variant={ROLE_COLORS[user.role] ?? "secondary"}>{user.role}</Badge>
-                      <div className="flex items-center gap-1">
-                        <Circle className={`w-2 h-2 ${user.isActive ? "text-green-400 fill-green-400" : "fill-current"}`} style={user.isActive ? {} : { color: '#6e6e6e' }} />
-                        <span className="text-xs" style={{ color: '#858585' }}>{user.isActive ? "Active" : "Inactive"}</span>
-                      </div>
+                  <div className="flex items-center gap-1">
+                    <Badge variant={ROLE_COLORS[user.role] ?? "secondary"}>{user.role}</Badge>
+                    <div className="flex items-center gap-1">
+                      <Circle className={`w-2 h-2 ${user.isActive ? "text-green-400 fill-green-400" : "fill-current"}`} style={user.isActive ? {} : { color: '#6e6e6e' }} />
+                      <span className="text-xs" style={{ color: '#858585' }}>{user.isActive ? "Active" : "Inactive"}</span>
                     </div>
                     <CardMenu
                       user={user}
