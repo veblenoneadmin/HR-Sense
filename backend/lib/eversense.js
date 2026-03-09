@@ -106,7 +106,15 @@ async function esGet(path, params) {
 // ─── Employees / Users ────────────────────────────────────────────────────────
 
 export async function getOrgMembers(orgId) {
-  return esGet(`/api/organizations/${orgId}/members`)
+  // Try the members endpoint first; fall back to allMembers from attendance/logs
+  const data = await esGet(`/api/organizations/${orgId}/members`)
+  if (data && !data.error) return data
+
+  console.warn('[eversense] members endpoint failed, falling back to attendance/logs allMembers')
+  const attendance = await esGet(`/api/attendance/logs`, { orgId })
+  const allMembers = attendance?.allMembers ?? []
+  // Normalize to the same shape the rest of the code expects: { members: [{ user: {...} }] }
+  return { members: allMembers.map(m => ({ userId: m.id, role: m.role, user: m })) }
 }
 
 export async function getUser(userId) {
