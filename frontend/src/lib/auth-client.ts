@@ -5,6 +5,9 @@ export interface HRUser {
   email: string
   name: string
   image?: string | null
+  role?: string
+  orgId?: string
+  orgName?: string
 }
 
 export interface StoredSession {

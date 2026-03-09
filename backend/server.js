@@ -30,6 +30,14 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }))
 
+// Promote X-Org-Id header into req.query.orgId so all routes get it automatically
+app.use((req, _res, next) => {
+  if (!req.query.orgId && req.headers['x-org-id']) {
+    req.query.orgId = req.headers['x-org-id']
+  }
+  next()
+})
+
 // ─── Health ────────────────────────────────────────────────────────────────────
 
 app.get('/health', async (req, res) => {

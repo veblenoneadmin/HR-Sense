@@ -3,10 +3,24 @@
  * In dev, calls go to /api/* which Vite proxies to the backend.
  * In production, the backend serves everything from the same origin.
  */
+import { getStoredSession } from './auth-client'
+
+function getAuthHeaders(): Record<string, string> {
+  const session = getStoredSession()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (session?.token) headers['Authorization'] = `Bearer ${session.token}`
+  if (session?.user?.orgId) headers['X-Org-Id'] = session.user.orgId
+  return headers
+}
+
+// Returns the logged-in user's orgId — use this instead of hardcoding
+export function getOrgId(): string {
+  return getStoredSession()?.user?.orgId ?? ''
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     ...options,
   })
   if (!res.ok) {

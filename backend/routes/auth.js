@@ -49,6 +49,8 @@ router.post('/login', async (req, res) => {
         return res.status(403).json({ error: 'Access denied. Only Owner or Admin can access HR-Sense.' })
       }
       user.role = role
+      user.orgId = orgs[0]?.id ?? ''
+      user.orgName = orgs[0]?.name ?? ''
     } catch {
       // If we can't verify role, deny access to be safe
       return res.status(403).json({ error: 'Could not verify user role. Access denied.' })
