@@ -1,30 +1,65 @@
+import { useState, useEffect } from "react";
 import { Search, Filter, UserPlus, Mail, Shield, Circle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
-import { MOCK_USERS, MOCK_PERFORMANCE, USER_DEPARTMENTS, USER_TITLES } from "@/lib/mock-data";
+import { employeesApi, performanceApi, getOrgId, EmployeeRow, KpiMetric } from "@/lib/api";
 
 const ROLE_COLORS: Record<string, "default" | "success" | "destructive" | "warning" | "secondary" | "outline"> = {
-  OWNER: "destructive",
-  ADMIN: "warning",
-  MANAGER: "default",
-  DEVELOPER: "secondary",
-  STAFF: "outline",
-  CLIENT: "secondary",
+  OWNER: "destructive", ADMIN: "warning", MANAGER: "default",
+  DEVELOPER: "secondary", STAFF: "outline", CLIENT: "secondary",
 };
 
+function currentPeriod() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export default function EmployeesPage() {
+  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [metrics, setMetrics] = useState<KpiMetric[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const orgId = getOrgId();
+    const period = currentPeriod();
+    setLoading(true);
+    Promise.all([employeesApi.list(orgId), performanceApi.list(orgId, period)])
+      .then(([empRes, perfRes]) => {
+        setEmployees(empRes.employees);
+        setMetrics(perfRes.metrics);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="p-6 text-sm text-gray-500">Loading employees...</div>;
+  if (error) return <div className="p-6 text-sm text-red-500">Error: {error}</div>;
+
+  const perfMap = Object.fromEntries(metrics.map((m) => [m.userId, m]));
+  const filtered = search
+    ? employees.filter((e) =>
+        e.name.toLowerCase().includes(search.toLowerCase()) ||
+        e.email.toLowerCase().includes(search.toLowerCase()) ||
+        (e.department ?? "").toLowerCase().includes(search.toLowerCase())
+      )
+    : employees;
+
+  const managers = employees.filter((u) => u.role === "MANAGER" || u.role === "OWNER" || u.role === "ADMIN").length;
+
   return (
     <div className="p-6 space-y-6">
-      {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white w-full sm:w-72">
           <Search className="w-4 h-4 text-gray-400" />
           <input
             type="text"
             placeholder="Search employees..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             className="text-sm text-gray-700 bg-transparent outline-none w-full placeholder-gray-400"
-            readOnly
           />
         </div>
         <div className="flex gap-2">
@@ -39,13 +74,12 @@ export default function EmployeesPage() {
         </div>
       </div>
 
-      {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Total", value: MOCK_USERS.length, color: "text-gray-900" },
-          { label: "Active", value: MOCK_USERS.filter((u) => u.isActive).length, color: "text-green-600" },
-          { label: "Managers", value: MOCK_USERS.filter((u) => u.role === "MANAGER" || u.role === "OWNER").length, color: "text-blue-600" },
-          { label: "On Leave", value: 2, color: "text-orange-600" },
+          { label: "Total", value: employees.length, color: "text-gray-900" },
+          { label: "Active", value: employees.filter((u) => u.isActive).length, color: "text-green-600" },
+          { label: "Managers", value: managers, color: "text-blue-600" },
+          { label: "Showing", value: filtered.length, color: "text-orange-600" },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3">
             <p className="text-xs text-gray-500">{s.label}</p>
@@ -54,21 +88,18 @@ export default function EmployeesPage() {
         ))}
       </div>
 
-      {/* Employee Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {MOCK_USERS.map((user) => {
-          const perf = MOCK_PERFORMANCE.find((p) => p.userId === user.id);
+        {filtered.map((user) => {
+          const perf = perfMap[user.id];
           return (
             <Card key={user.id} className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-3">
                   <Avatar name={user.name} size="lg" />
                   <div className="flex flex-col items-end gap-1">
-                    <Badge variant={ROLE_COLORS[user.role]}>{user.role}</Badge>
+                    <Badge variant={ROLE_COLORS[user.role] ?? "secondary"}>{user.role}</Badge>
                     <div className="flex items-center gap-1">
-                      <Circle
-                        className={`w-2 h-2 ${user.isActive ? "text-green-500 fill-green-500" : "text-gray-400 fill-gray-400"}`}
-                      />
+                      <Circle className={`w-2 h-2 ${user.isActive ? "text-green-500 fill-green-500" : "text-gray-400 fill-gray-400"}`} />
                       <span className="text-xs text-gray-500">{user.isActive ? "Active" : "Inactive"}</span>
                     </div>
                   </div>
@@ -76,8 +107,8 @@ export default function EmployeesPage() {
 
                 <div className="space-y-1 mb-3">
                   <p className="font-semibold text-gray-900 text-sm">{user.name}</p>
-                  <p className="text-xs text-gray-500">{USER_TITLES[user.id]}</p>
-                  <p className="text-xs text-gray-400">{USER_DEPARTMENTS[user.id]}</p>
+                  {user.title && <p className="text-xs text-gray-500">{user.title}</p>}
+                  {user.department && <p className="text-xs text-gray-400">{user.department}</p>}
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
@@ -85,7 +116,7 @@ export default function EmployeesPage() {
                   <span className="truncate">{user.email}</span>
                 </div>
 
-                {perf && (
+                {perf ? (
                   <div className="pt-3 border-t border-gray-100 grid grid-cols-3 gap-2 text-center">
                     <div>
                       <p className="text-sm font-semibold text-gray-900">{perf.hoursLogged}h</p>
@@ -100,9 +131,7 @@ export default function EmployeesPage() {
                       <p className="text-xs text-gray-400">Score</p>
                     </div>
                   </div>
-                )}
-
-                {!perf && (
+                ) : (
                   <div className="pt-3 border-t border-gray-100">
                     <p className="text-xs text-gray-400 italic">No performance data</p>
                   </div>
@@ -118,10 +147,9 @@ export default function EmployeesPage() {
         })}
       </div>
 
-      {/* Source attribution */}
       <div className="flex items-center gap-2 text-xs text-gray-400">
         <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-        <span>Employee data sourced from EverSense · Users, OrganizationMembers, and Performance KPIs</span>
+        <span>Employee data sourced from EverSense · {employees.length} members</span>
       </div>
     </div>
   );
