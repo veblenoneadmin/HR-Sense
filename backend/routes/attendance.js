@@ -19,16 +19,30 @@ router.get('/', async (req, res) => {
       getOrgMembers(orgId, userToken),
     ])
 
-    const logs = timeLogs?.data ?? timeLogs?.logs ?? timeLogs ?? []
+    const rawLogs = timeLogs?.data ?? timeLogs?.logs ?? timeLogs ?? []
     const users = (members?.members ?? members ?? []).map(m => m.user ?? m)
+
+    // Normalize EverSense attendance format to HR-Sense format
+    const logs = rawLogs.map(log => ({
+      id: log.id,
+      userId: log.memberId ?? log.userId,
+      userName: log.memberName ?? log.userName,
+      duration: log.durationMins ?? Math.round((log.duration ?? 0) / 60), // normalize to minutes
+      startTime: log.timeIn ?? log.startTime,
+      endTime: log.timeOut ?? log.endTime,
+      projectId: log.projectId ?? null,
+      projectName: log.projectName ?? null,
+      isRunning: log.isActive ?? false,
+    }))
 
     // Aggregate by user
     const userMap = {}
     for (const log of logs) {
       const uid = log.userId
+      if (!uid) continue
       if (!userMap[uid]) {
-        const user = users.find(u => u.id === uid) ?? { id: uid, name: 'Unknown' }
-        userMap[uid] = { userId: uid, userName: user.name, totalMinutes: 0, sessions: 0, projects: new Set() }
+        const user = users.find(u => u.id === uid) ?? { id: uid, name: log.userName ?? 'Unknown' }
+        userMap[uid] = { userId: uid, userName: user.name ?? log.userName, totalMinutes: 0, sessions: 0, projects: new Set() }
       }
       userMap[uid].totalMinutes += log.duration ?? 0
       userMap[uid].sessions++

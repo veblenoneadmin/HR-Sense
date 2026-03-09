@@ -180,14 +180,18 @@ export async function getAttendanceLogs(orgId, params = {}, userToken) {
 export async function buildKpiForUser(userId, period, userToken) {
   const [startDate, endDate] = getPeriodBounds(period)
   const [timeLogs, tasks, reports] = await Promise.all([
-    getUserTimeLogs(userId, { startDate, endDate }, userToken),
+    getAttendanceLogs(null, { userId, startDate, endDate }, userToken),
     getUserTasks(userId, { startDate, endDate }, userToken),
     getReports(null, { userId, startDate, endDate }, userToken),
   ])
 
-  const logs = timeLogs?.data ?? timeLogs ?? []
+  const logs = timeLogs?.data ?? timeLogs?.logs ?? timeLogs ?? []
   const hoursLogged = Array.isArray(logs)
-    ? logs.reduce((sum, t) => sum + (t.duration ?? t.durationMinutes ?? 0), 0) / 60
+    ? logs.reduce((sum, t) => {
+        // EverSense may return duration in seconds (timer) or durationMins in minutes (attendance)
+        const mins = t.durationMins ?? t.durationMinutes ?? (t.duration ? t.duration / 60 : 0)
+        return sum + mins
+      }, 0) / 60
     : 0
 
   const taskList = tasks?.data ?? tasks?.tasks ?? tasks ?? []
