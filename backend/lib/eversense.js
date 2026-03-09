@@ -68,8 +68,18 @@ function buildHeaders(token, cookie) {
   return h
 }
 
-async function esGet(path, params) {
-  let { token, cookie } = await getServiceSession()
+// userToken: the logged-in user's EverSense token (forwarded from Authorization header).
+// If provided, use it directly. If not (or if it 401s), fall back to service account.
+async function esGet(path, params, userToken = null) {
+  // Prefer the user's own token — it has access to their org
+  let token = userToken
+  let cookie = userToken ? `__Secure-better-auth.session_token=${userToken}` : null
+
+  if (!token) {
+    const svc = await getServiceSession()
+    token = svc.token
+    cookie = svc.cookie
+  }
 
   const res = await axios.get(`${BASE_URL}${path}`, {
     params,
@@ -78,8 +88,9 @@ async function esGet(path, params) {
     validateStatus: () => true,
   })
 
+  // On 401, try the service account as a fallback (user token may have expired)
   if (res.status === 401) {
-    console.warn('[eversense] 401 on', path, '— invalidating session cache and retrying')
+    console.warn('[eversense] 401 on', path, '— trying service account fallback')
     _cachedToken = null
     _cachedCookie = null
     _tokenExpiry = 0
@@ -105,73 +116,73 @@ async function esGet(path, params) {
 
 // ─── Employees / Users ────────────────────────────────────────────────────────
 
-export async function getOrgMembers(orgId) {
+export async function getOrgMembers(orgId, userToken) {
   // Try the members endpoint first; fall back to allMembers from attendance/logs
-  const data = await esGet(`/api/organizations/${orgId}/members`)
+  const data = await esGet(`/api/organizations/${orgId}/members`, null, userToken)
   if (data && !data.error) return data
 
   console.warn('[eversense] members endpoint failed, falling back to attendance/logs allMembers')
-  const attendance = await esGet(`/api/attendance/logs`, { orgId })
+  const attendance = await esGet(`/api/attendance/logs`, { orgId }, userToken)
   const allMembers = attendance?.allMembers ?? []
   // Normalize to the same shape the rest of the code expects: { members: [{ user: {...} }] }
   return { members: allMembers.map(m => ({ userId: m.id, role: m.role, user: m })) }
 }
 
-export async function getUser(userId) {
-  return esGet(`/api/users/${userId}`)
+export async function getUser(userId, userToken) {
+  return esGet(`/api/users/${userId}`, null, userToken)
 }
 
 // ─── Time Logs ────────────────────────────────────────────────────────────────
 // EverSense endpoints: /api/timers/recent (all entries), /api/timers/team (grouped by member)
 
-export async function getTimeLogs(orgId, params = {}) {
-  return esGet(`/api/timers/recent`, { orgId, ...params })
+export async function getTimeLogs(orgId, params = {}, userToken) {
+  return esGet(`/api/timers/recent`, { orgId, ...params }, userToken)
 }
 
-export async function getUserTimeLogs(userId, params = {}) {
-  return esGet(`/api/timers/recent`, { userId, ...params })
+export async function getUserTimeLogs(userId, params = {}, userToken) {
+  return esGet(`/api/timers/recent`, { userId, ...params }, userToken)
 }
 
-export async function getTeamTimerStats(orgId, params = {}) {
-  return esGet(`/api/timers/team`, { orgId, ...params })
+export async function getTeamTimerStats(orgId, params = {}, userToken) {
+  return esGet(`/api/timers/team`, { orgId, ...params }, userToken)
 }
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
-export async function getTasks(orgId, params = {}) {
-  return esGet(`/api/tasks/org/${orgId}`, params)
+export async function getTasks(orgId, params = {}, userToken) {
+  return esGet(`/api/tasks/org/${orgId}`, params, userToken)
 }
 
-export async function getUserTasks(userId, params = {}) {
-  return esGet(`/api/tasks`, { assignedUserId: userId, ...params })
+export async function getUserTasks(userId, params = {}, userToken) {
+  return esGet(`/api/tasks`, { assignedUserId: userId, ...params }, userToken)
 }
 
 // ─── Projects ─────────────────────────────────────────────────────────────────
 
-export async function getProjects(orgId) {
-  return esGet(`/api/projects`, { orgId })
+export async function getProjects(orgId, userToken) {
+  return esGet(`/api/projects`, { orgId }, userToken)
 }
 
 // ─── Reports / KPIs ───────────────────────────────────────────────────────────
 
-export async function getReports(orgId, params = {}) {
-  return esGet(`/api/user-reports`, { orgId, ...params })
+export async function getReports(orgId, params = {}, userToken) {
+  return esGet(`/api/user-reports`, { orgId, ...params }, userToken)
 }
 
 // ─── Attendance ───────────────────────────────────────────────────────────────
 
-export async function getAttendanceLogs(orgId, params = {}) {
-  return esGet(`/api/attendance/logs`, { orgId, ...params })
+export async function getAttendanceLogs(orgId, params = {}, userToken) {
+  return esGet(`/api/attendance/logs`, { orgId, ...params }, userToken)
 }
 
 // ─── KPI aggregation ─────────────────────────────────────────────────────────
 
-export async function buildKpiForUser(userId, period) {
+export async function buildKpiForUser(userId, period, userToken) {
   const [startDate, endDate] = getPeriodBounds(period)
   const [timeLogs, tasks, reports] = await Promise.all([
-    getUserTimeLogs(userId, { startDate, endDate }),
-    getUserTasks(userId, { startDate, endDate }),
-    getReports(null, { userId, startDate, endDate }),
+    getUserTimeLogs(userId, { startDate, endDate }, userToken),
+    getUserTasks(userId, { startDate, endDate }, userToken),
+    getReports(null, { userId, startDate, endDate }, userToken),
   ])
 
   const logs = timeLogs?.data ?? timeLogs ?? []

@@ -14,8 +14,8 @@ router.get('/', async (req, res) => {
     const { orgId } = req.query
     if (!orgId) return res.status(400).json({ error: 'orgId required' })
 
-    // Fetch from EverSense (service account auth handled in eversense.js)
-    const esMembers = await getOrgMembers(orgId)
+    const userToken = req.headers.authorization?.replace('Bearer ', '') || null
+    const esMembers = await getOrgMembers(orgId, userToken)
 
     // Enrich with HR-Sense profiles
     const profiles = await prisma.employeeProfile.findMany({

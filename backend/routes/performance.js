@@ -13,7 +13,8 @@ router.get('/', async (req, res) => {
     const { orgId, period } = req.query
     if (!orgId || !period) return res.status(400).json({ error: 'orgId and period required' })
 
-    const members = await getOrgMembers(orgId)
+    const userToken = req.headers.authorization?.replace('Bearer ', '') || null
+    const members = await getOrgMembers(orgId, userToken)
     const users = (members?.members ?? members ?? [])
       .map(m => m.user ?? m)
       .filter(u => u.isActive !== false)
@@ -21,7 +22,7 @@ router.get('/', async (req, res) => {
     const metrics = await Promise.all(
       users.map(async user => {
         try {
-          const kpi = await buildKpiForUser(user.id, period)
+          const kpi = await buildKpiForUser(user.id, period, userToken)
           return { ...kpi, userName: user.name, userImage: user.image }
         } catch {
           return { userId: user.id, userName: user.name, period, hoursLogged: 0, tasksCompleted: 0, reportsSubmitted: 0, performanceScore: 0, tier: 'UNDERPERFORMING' }
