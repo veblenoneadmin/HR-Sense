@@ -25,7 +25,7 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   return (
-    <aside className="w-64 min-h-screen bg-gray-950 flex flex-col flex-shrink-0">
+    <aside className="w-64 min-h-screen flex flex-col flex-shrink-0" style={{ backgroundColor: '#252526' }}>
       <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-800">
         <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
           <Zap className="w-4 h-4 text-white" />

@@ -12,6 +12,8 @@ import performanceRouter from './routes/performance.js'
 import leavesRouter from './routes/leaves.js'
 import payrollRouter from './routes/payroll.js'
 import departmentsRouter from './routes/departments.js'
+import authRouter from './routes/auth.js'
+import notificationsRouter from './routes/notifications.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -41,6 +43,8 @@ app.get('/health', async (req, res) => {
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 
+app.use('/api/auth', authRouter)
+app.use('/api/notifications', notificationsRouter)
 app.use('/api/employees', employeesRouter)
 app.use('/api/attendance', attendanceRouter)
 app.use('/api/performance', performanceRouter)
