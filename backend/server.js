@@ -86,22 +86,29 @@ app.get('/api/debug/service-auth', async (req, res) => {
       tokenExtracted: token ? token.slice(0, 20) + '...' : null,
     }
 
-    if (token && orgId) {
+    if (token) {
       const headers = {
         Authorization: `Bearer ${token}`,
         Cookie: cookiePart,
       }
-      const membersRes = await axios.get(`${base}/api/organizations/${orgId}/members`, {
-        headers, timeout: 8000, validateStatus: () => true,
-      })
-      result.members = { status: membersRes.status, data: membersRes.data }
 
-      // Probe correct EverSense time-log endpoints
-      for (const ep of ['/api/timers/recent', '/api/timers/team', '/api/attendance/logs', '/api/user-reports']) {
-        const r = await axios.get(`${base}${ep}`, {
-          params: { orgId }, headers, timeout: 8000, validateStatus: () => true,
+      // Always check what orgs this service account belongs to
+      const orgsRes = await axios.get(`${base}/api/organizations`, { headers, timeout: 8000, validateStatus: () => true })
+      result.myOrgs = { status: orgsRes.status, data: orgsRes.data }
+
+      if (orgId) {
+        const membersRes = await axios.get(`${base}/api/organizations/${orgId}/members`, {
+          headers, timeout: 8000, validateStatus: () => true,
         })
-        result[`probe_${ep.replace(/\//g, '_')}`] = { status: r.status, sample: JSON.stringify(r.data).slice(0, 300) }
+        result.members = { status: membersRes.status, data: membersRes.data }
+
+        // Probe correct EverSense time-log endpoints
+        for (const ep of ['/api/timers/recent', '/api/timers/team', '/api/attendance/logs', '/api/user-reports']) {
+          const r = await axios.get(`${base}${ep}`, {
+            params: { orgId }, headers, timeout: 8000, validateStatus: () => true,
+          })
+          result[`probe_${ep.replace(/\//g, '_')}`] = { status: r.status, sample: JSON.stringify(r.data).slice(0, 300) }
+        }
       }
     }
   } catch (e) {
