@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Save, Mail, Shield, Briefcase, Phone, CreditCard, Heart, Building2 } from "lucide-react";
+import { X, Save, Mail, Shield, Briefcase, CreditCard, Heart, Building2 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { employeesApi, EmployeeRow, KpiMetric } from "@/lib/api";
@@ -92,10 +92,8 @@ export default function EmployeeDetailModal({ employee, perf, onClose, onSaved }
     setSaving(true);
     setError("");
     try {
-      const payload = {
-        ...form,
-        ratePerHour: form.ratePerHour === "" ? null : Number(form.ratePerHour),
-      };
+      const ratePerHour = form.ratePerHour === "" ? undefined : Number(form.ratePerHour);
+      const payload = { ...form, ratePerHour };
       await employeesApi.update(employee.profileId, payload);
       onSaved({ ...employee, ...payload });
     } catch (e: any) {
