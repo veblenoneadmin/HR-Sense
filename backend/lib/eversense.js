@@ -1,24 +1,92 @@
 /**
  * EverSense API client
- * Fetches employee, task, time log, and KPI data from the EverSense backend.
- * Forwards the user's Better Auth session token so EverSense can authenticate the request.
+ * Uses a service account (EVERSENSE_SERVICE_EMAIL / PASSWORD) to authenticate
+ * server-to-server. Session is cached and auto-refreshed.
  */
 import axios from 'axios'
 
 const BASE_URL = process.env.EVERSENSE_API_URL || 'https://eversense-ai.up.railway.app'
 
-// Build a per-request axios instance with the user's session token
-function makeClient(token) {
+// ─── Service-account session cache ────────────────────────────────────────────
+
+let _cachedToken = null
+let _tokenExpiry = 0
+
+async function getServiceToken() {
+  if (_cachedToken && Date.now() < _tokenExpiry) return _cachedToken
+
+  const email = process.env.EVERSENSE_SERVICE_EMAIL
+  const password = process.env.EVERSENSE_SERVICE_PASSWORD
+
+  if (!email || !password) {
+    console.warn('[eversense] EVERSENSE_SERVICE_EMAIL / PASSWORD not set — unauthenticated requests will likely fail')
+    return null
+  }
+
+  console.log('[eversense] signing in service account:', email)
+  const res = await axios.post(
+    `${BASE_URL}/api/auth/sign-in/email`,
+    { email, password },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 10000, validateStatus: () => true }
+  )
+
+  if (res.status >= 400) {
+    console.error('[eversense] service account login failed:', res.status, res.data)
+    return null
+  }
+
+  // Extract the cookie token (same logic as auth.js)
+  const setCookieHeader = res.headers['set-cookie']
+  const allCookies = Array.isArray(setCookieHeader) ? setCookieHeader : (setCookieHeader ? [setCookieHeader] : [])
+  const authCookie = allCookies.find(c => c.includes('better-auth.session_token='))
+  const token = authCookie
+    ? authCookie.split(';')[0].replace('better-auth.session_token=', '').trim()
+    : (res.data?.session?.token || res.data?.token || null)
+
+  if (!token) {
+    console.error('[eversense] service account login: no token in response')
+    return null
+  }
+
+  _cachedToken = token
+  _tokenExpiry = Date.now() + 22 * 60 * 60 * 1000 // refresh every 22 hours
+  console.log('[eversense] service account session acquired:', token.slice(0, 20) + '...')
+  return token
+}
+
+// ─── HTTP helper ──────────────────────────────────────────────────────────────
+
+async function esGet(path, params) {
+  const token = await getServiceToken()
   const headers = { 'Content-Type': 'application/json' }
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
     headers['Cookie'] = `better-auth.session_token=${token}`
   }
-  return axios.create({ baseURL: BASE_URL, headers, timeout: 10000, validateStatus: () => true })
-}
 
-async function esGet(path, params, token) {
-  const res = await makeClient(token).get(path, { params })
+  const res = await axios.get(`${BASE_URL}${path}`, {
+    params,
+    headers,
+    timeout: 10000,
+    validateStatus: () => true,
+  })
+
+  if (res.status === 401) {
+    // Token may have expired — invalidate cache and retry once
+    console.warn('[eversense] 401 on', path, '— invalidating session cache and retrying')
+    _cachedToken = null
+    _tokenExpiry = 0
+    const fresh = await getServiceToken()
+    if (!fresh) return null
+    headers['Authorization'] = `Bearer ${fresh}`
+    headers['Cookie'] = `better-auth.session_token=${fresh}`
+    const retry = await axios.get(`${BASE_URL}${path}`, { params, headers, timeout: 10000, validateStatus: () => true })
+    if (retry.status >= 400) {
+      console.error(`[eversense] ${path} → ${retry.status}`, JSON.stringify(retry.data).slice(0, 200))
+    }
+    return retry.data
+  }
+
   if (res.status >= 400) {
     console.error(`[eversense] ${path} → ${res.status}`, JSON.stringify(res.data).slice(0, 200))
   }
@@ -27,60 +95,60 @@ async function esGet(path, params, token) {
 
 // ─── Employees / Users ────────────────────────────────────────────────────────
 
-export async function getOrgMembers(orgId, token) {
-  return esGet(`/api/organizations/${orgId}/members`, undefined, token)
+export async function getOrgMembers(orgId) {
+  return esGet(`/api/organizations/${orgId}/members`)
 }
 
-export async function getUser(userId, token) {
-  return esGet(`/api/users/${userId}`, undefined, token)
+export async function getUser(userId) {
+  return esGet(`/api/users/${userId}`)
 }
 
 // ─── Time Logs ────────────────────────────────────────────────────────────────
 
-export async function getTimeLogs(orgId, params = {}, token) {
-  return esGet(`/api/timers`, { orgId, ...params }, token)
+export async function getTimeLogs(orgId, params = {}) {
+  return esGet(`/api/timers`, { orgId, ...params })
 }
 
-export async function getUserTimeLogs(userId, params = {}, token) {
-  return esGet(`/api/timers`, { userId, ...params }, token)
+export async function getUserTimeLogs(userId, params = {}) {
+  return esGet(`/api/timers`, { userId, ...params })
 }
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
-export async function getTasks(orgId, params = {}, token) {
-  return esGet(`/api/tasks`, { orgId, ...params }, token)
+export async function getTasks(orgId, params = {}) {
+  return esGet(`/api/tasks`, { orgId, ...params })
 }
 
-export async function getUserTasks(userId, params = {}, token) {
-  return esGet(`/api/tasks`, { assignedUserId: userId, ...params }, token)
+export async function getUserTasks(userId, params = {}) {
+  return esGet(`/api/tasks`, { assignedUserId: userId, ...params })
 }
 
 // ─── Projects ─────────────────────────────────────────────────────────────────
 
-export async function getProjects(orgId, token) {
-  return esGet(`/api/projects`, { orgId }, token)
+export async function getProjects(orgId) {
+  return esGet(`/api/projects`, { orgId })
 }
 
 // ─── Reports / KPIs ───────────────────────────────────────────────────────────
 
-export async function getReports(orgId, params = {}, token) {
-  return esGet(`/api/reports`, { orgId, ...params }, token)
+export async function getReports(orgId, params = {}) {
+  return esGet(`/api/reports`, { orgId, ...params })
 }
 
-// ─── Attendance (EverSense native) ───────────────────────────────────────────
+// ─── Attendance ───────────────────────────────────────────────────────────────
 
-export async function getAttendance(orgId, params = {}, token) {
-  return esGet(`/api/attendance`, { orgId, ...params }, token)
+export async function getAttendance(orgId, params = {}) {
+  return esGet(`/api/attendance`, { orgId, ...params })
 }
 
-// ─── KPI aggregation (computed from EverSense data) ──────────────────────────
+// ─── KPI aggregation ─────────────────────────────────────────────────────────
 
-export async function buildKpiForUser(userId, period, token) {
+export async function buildKpiForUser(userId, period) {
   const [startDate, endDate] = getPeriodBounds(period)
   const [timeLogs, tasks, reports] = await Promise.all([
-    getUserTimeLogs(userId, { startDate, endDate }, token),
-    getUserTasks(userId, { startDate, endDate }, token),
-    getReports(null, { userId, startDate, endDate }, token),
+    getUserTimeLogs(userId, { startDate, endDate }),
+    getUserTasks(userId, { startDate, endDate }),
+    getReports(null, { userId, startDate, endDate }),
   ])
 
   const hoursLogged = (timeLogs?.data ?? timeLogs ?? [])
