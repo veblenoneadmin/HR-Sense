@@ -45,8 +45,8 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="p-6 text-sm text-gray-500">Loading dashboard...</div>;
-  if (error) return <div className="p-6 text-sm text-red-500">Error: {error}</div>;
+  if (loading) return <div className="p-6 text-sm" style={{ color: '#858585' }}>Loading dashboard...</div>;
+  if (error) return <div className="p-6 text-sm text-red-400">Error: {error}</div>;
 
   const activeEmployees = employees.filter((u) => u.isActive).length;
   const pendingLeaves = leaves.filter((l) => l.status === "PENDING").length;
@@ -57,15 +57,14 @@ export default function DashboardPage() {
   const period = currentPeriod();
   const periodLabel = new Date(period + "-01").toLocaleString("en-US", { month: "long", year: "numeric" });
 
-  // Build employee name lookup from leave & payroll employee.esUserId
   const empMap: Record<string, string> = {};
   employees.forEach((e) => { empMap[e.id] = e.name; });
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-blue-50 border border-blue-200">
-        <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-        <p className="text-sm text-blue-700">
+      <div className="flex items-center gap-3 px-4 py-3 rounded-lg" style={{ backgroundColor: 'rgba(0,122,204,0.12)', border: '1px solid rgba(0,122,204,0.25)' }}>
+        <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+        <p className="text-sm" style={{ color: '#7dbfff' }}>
           <span className="font-semibold">EverSense Connected</span> — Live data synced for {employees.length} employees · {periodLabel}
         </p>
       </div>
@@ -80,22 +79,22 @@ export default function DashboardPage() {
       {(burnoutRisk > 0 || underperforming > 0) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {burnoutRisk > 0 && (
-            <div className="flex items-start gap-3 p-4 rounded-lg bg-yellow-50 border border-yellow-200">
-              <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <div className="flex items-start gap-3 p-4 rounded-lg" style={{ backgroundColor: 'rgba(255,152,0,0.1)', border: '1px solid rgba(255,152,0,0.25)' }}>
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#ff9800' }} />
               <div>
-                <p className="text-sm font-semibold text-yellow-800">{burnoutRisk} Burnout Risk</p>
-                <p className="text-xs text-yellow-700">
+                <p className="text-sm font-semibold" style={{ color: '#ffb74d' }}>{burnoutRisk} Burnout Risk</p>
+                <p className="text-xs mt-0.5" style={{ color: '#cc7a00' }}>
                   {metrics.filter((m) => m.tier === "BURNOUT_RISK").map((m) => m.userName).join(", ")} — workload review recommended.
                 </p>
               </div>
             </div>
           )}
           {underperforming > 0 && (
-            <div className="flex items-start gap-3 p-4 rounded-lg bg-red-50 border border-red-200">
-              <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+            <div className="flex items-start gap-3 p-4 rounded-lg" style={{ backgroundColor: 'rgba(244,71,71,0.1)', border: '1px solid rgba(244,71,71,0.25)' }}>
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#f44747' }} />
               <div>
-                <p className="text-sm font-semibold text-red-800">{underperforming} Underperforming</p>
-                <p className="text-xs text-red-700">
+                <p className="text-sm font-semibold" style={{ color: '#f44747' }}>{underperforming} Underperforming</p>
+                <p className="text-xs mt-0.5" style={{ color: '#c03030' }}>
                   {metrics.filter((m) => m.tier === "UNDERPERFORMING").map((m) => m.userName).join(", ")} — performance review recommended.
                 </p>
               </div>
@@ -112,7 +111,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {metrics.length === 0 ? (
-              <p className="text-sm text-gray-400">No performance data for this period.</p>
+              <p className="text-sm" style={{ color: '#6e6e6e' }}>No performance data for this period.</p>
             ) : (
               <div className="space-y-3">
                 {metrics.slice(0, 7).map((m) => (
@@ -120,18 +119,18 @@ export default function DashboardPage() {
                     <Avatar name={m.userName ?? m.userId} size="sm" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium text-gray-900 truncate">{m.userName ?? m.userId}</p>
+                        <p className="text-sm font-medium truncate" style={{ color: '#e0e0e0' }}>{m.userName ?? m.userId}</p>
                         <Badge variant={TIER_COLORS[m.tier]}>{TIER_LABELS[m.tier]}</Badge>
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-semibold text-gray-900">{m.hoursLogged}h</p>
-                      <p className="text-xs text-gray-500">{m.tasksCompleted} tasks</p>
+                      <p className="text-sm font-semibold" style={{ color: '#e0e0e0' }}>{m.hoursLogged}h</p>
+                      <p className="text-xs" style={{ color: '#858585' }}>{m.tasksCompleted} tasks</p>
                     </div>
                     <div className="w-20 hidden sm:block">
-                      <div className="h-1.5 rounded-full bg-gray-100">
+                      <div className="h-1.5 rounded-full" style={{ backgroundColor: '#3c3c3c' }}>
                         <div
-                          className={`h-1.5 rounded-full ${m.tier === "STAR" ? "bg-green-500" : m.tier === "GOOD" ? "bg-blue-500" : m.tier === "BURNOUT_RISK" ? "bg-yellow-500" : m.tier === "UNDERPERFORMING" ? "bg-red-500" : "bg-gray-400"}`}
+                          className={`h-1.5 rounded-full ${m.tier === "STAR" ? "bg-green-400" : m.tier === "GOOD" ? "bg-blue-400" : m.tier === "BURNOUT_RISK" ? "bg-yellow-400" : m.tier === "UNDERPERFORMING" ? "bg-red-400" : "bg-gray-500"}`}
                           style={{ width: `${Math.min((m.performanceScore / 2) * 100, 100)}%` }}
                         />
                       </div>
@@ -154,18 +153,18 @@ export default function DashboardPage() {
                 const name = empMap[l.employee?.esUserId] ?? l.employee?.esUserId ?? "Employee";
                 return (
                   <div key={l.id} className="flex items-start gap-3">
-                    <CalendarOff className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                    <CalendarOff className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-400" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-700 leading-relaxed">{name} — {l.type} leave ({l.status})</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{l.startDate} → {l.endDate}</p>
+                      <p className="text-xs leading-relaxed" style={{ color: '#cccccc' }}>{name} — {l.type} leave ({l.status})</p>
+                      <p className="text-xs mt-0.5" style={{ color: '#6e6e6e' }}>{l.startDate} → {l.endDate}</p>
                     </div>
                   </div>
                 );
               })}
               <div className="flex items-start gap-3">
-                <Activity className="w-4 h-4 mt-0.5 flex-shrink-0 text-orange-500" />
+                <Activity className="w-4 h-4 mt-0.5 flex-shrink-0 text-orange-400" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-700 leading-relaxed">EverSense KPI sync completed — {metrics.length} employees updated</p>
+                  <p className="text-xs leading-relaxed" style={{ color: '#cccccc' }}>EverSense KPI sync completed — {metrics.length} employees updated</p>
                 </div>
               </div>
             </div>
@@ -181,17 +180,17 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {pendingLeaves === 0 ? (
-              <p className="text-sm text-gray-400">No pending requests.</p>
+              <p className="text-sm" style={{ color: '#6e6e6e' }}>No pending requests.</p>
             ) : (
               <div className="space-y-3">
                 {leaves.filter((l) => l.status === "PENDING").map((leave) => {
                   const name = empMap[leave.employee?.esUserId] ?? leave.employee?.esUserId ?? "Employee";
                   return (
-                    <div key={leave.id} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
+                    <div key={leave.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: '#252526', border: '1px solid #3c3c3c' }}>
                       <Avatar name={name} size="sm" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">{name}</p>
-                        <p className="text-xs text-gray-500">{leave.type} · {leave.days} days · from {leave.startDate}</p>
+                        <p className="text-sm font-medium" style={{ color: '#e0e0e0' }}>{name}</p>
+                        <p className="text-xs" style={{ color: '#858585' }}>{leave.type} · {leave.days} days · from {leave.startDate}</p>
                       </div>
                       <Badge variant="warning">Pending</Badge>
                     </div>
@@ -209,22 +208,22 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {payroll.length === 0 ? (
-              <p className="text-sm text-gray-400">No payroll records for this period.</p>
+              <p className="text-sm" style={{ color: '#6e6e6e' }}>No payroll records for this period.</p>
             ) : (
               <div className="space-y-2">
                 {payroll.map((pr) => {
                   const name = empMap[pr.employee?.esUserId] ?? pr.employee?.esUserId ?? "Employee";
                   return (
-                    <div key={pr.id} className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                    <div key={pr.id} className="flex items-center justify-between py-1.5" style={{ borderBottom: '1px solid #3c3c3c' }}>
                       <div className="flex items-center gap-2">
                         <Avatar name={name} size="sm" />
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{name}</p>
-                          <p className="text-xs text-gray-500">{pr.employee?.department?.name ?? "—"}</p>
+                          <p className="text-sm font-medium" style={{ color: '#e0e0e0' }}>{name}</p>
+                          <p className="text-xs" style={{ color: '#858585' }}>{pr.employee?.department?.name ?? "—"}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-gray-900">${pr.netPay.toLocaleString()}</span>
+                        <span className="text-sm font-semibold" style={{ color: '#e0e0e0' }}>${pr.netPay.toLocaleString()}</span>
                         <Badge variant={pr.status === "PAID" ? "success" : pr.status === "PROCESSED" ? "default" : "secondary"}>
                           {pr.status}
                         </Badge>
@@ -246,23 +245,23 @@ function StatCard({ icon: Icon, label, value, sub, color }: {
   label: string; value: string | number; sub: string;
   color: "blue" | "green" | "orange" | "purple";
 }) {
-  const colors = {
-    blue: { bg: "bg-blue-50", icon: "text-blue-600", border: "border-blue-100" },
-    green: { bg: "bg-green-50", icon: "text-green-600", border: "border-green-100" },
-    orange: { bg: "bg-orange-50", icon: "text-orange-600", border: "border-orange-100" },
-    purple: { bg: "bg-purple-50", icon: "text-purple-600", border: "border-purple-100" },
+  const configs = {
+    blue:   { iconBg: 'rgba(0,122,204,0.15)',   iconColor: '#7dbfff', valueColor: '#7dbfff'   },
+    green:  { iconBg: 'rgba(76,175,80,0.15)',    iconColor: '#81c784', valueColor: '#81c784'   },
+    orange: { iconBg: 'rgba(255,152,0,0.15)',    iconColor: '#ffb74d', valueColor: '#ffb74d'   },
+    purple: { iconBg: 'rgba(156,39,176,0.15)',   iconColor: '#ce93d8', valueColor: '#ce93d8'   },
   }[color];
   return (
     <Card>
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs text-gray-500 font-medium">{label}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
+            <p className="text-xs font-medium" style={{ color: '#858585' }}>{label}</p>
+            <p className="text-2xl font-bold mt-1" style={{ color: configs.valueColor }}>{value}</p>
+            <p className="text-xs mt-0.5" style={{ color: '#6e6e6e' }}>{sub}</p>
           </div>
-          <div className={`p-2.5 rounded-lg ${colors.bg} border ${colors.border}`}>
-            <Icon className={`w-5 h-5 ${colors.icon}`} />
+          <div className="p-2.5 rounded-lg" style={{ backgroundColor: configs.iconBg, color: configs.iconColor }}>
+            <Icon className="w-5 h-5" />
           </div>
         </div>
       </CardContent>

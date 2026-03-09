@@ -13,21 +13,17 @@ export default function AttendancePage() {
 
   useEffect(() => {
     const orgId = getOrgId();
-    // Last 30 days
     const endDate = new Date().toISOString().split("T")[0];
     const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     setLoading(true);
     attendanceApi.get(orgId, startDate, endDate)
-      .then((res) => {
-        setSummary(res.summary);
-        setLogs(res.logs);
-      })
+      .then((res) => { setSummary(res.summary); setLogs(res.logs); })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="p-6 text-sm text-gray-500">Loading attendance...</div>;
-  if (error) return <div className="p-6 text-sm text-red-500">Error: {error}</div>;
+  if (loading) return <div className="p-6 text-sm" style={{ color: '#858585' }}>Loading attendance...</div>;
+  if (error) return <div className="p-6 text-sm text-red-400">Error: {error}</div>;
 
   const totalHours = summary.reduce((a, s) => a + s.totalHours, 0);
   const overtimeCount = summary.filter((s) => s.status === "OVERTIME").length;
@@ -46,26 +42,24 @@ export default function AttendancePage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-green-50 border border-green-200">
-        <Clock className="w-4 h-4 text-green-600 flex-shrink-0" />
-        <p className="text-sm text-green-700">
+      <div className="flex items-center gap-3 px-4 py-3 rounded-lg" style={{ backgroundColor: 'rgba(76,175,80,0.1)', border: '1px solid rgba(76,175,80,0.25)' }}>
+        <Clock className="w-4 h-4 flex-shrink-0" style={{ color: '#81c784' }} />
+        <p className="text-sm" style={{ color: '#81c784' }}>
           <span className="font-semibold">Sourced from EverSense TimeLogs</span> — Last 30 days · {summary.length} active employees
         </p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total Hours", value: `${totalHours.toFixed(1)}h`, sub: "Team total", color: "blue" },
-          { label: "Avg / Employee", value: summary.length > 0 ? `${(totalHours / summary.length).toFixed(1)}h` : "—", sub: "Per person", color: "green" },
-          { label: "Overtime", value: overtimeCount, sub: "Above normal", color: "orange" },
-          { label: "Low Hours", value: lowCount, sub: "Below average", color: "red" },
+          { label: "Total Hours", value: `${totalHours.toFixed(1)}h`, sub: "Team total", color: '#7dbfff' },
+          { label: "Avg / Employee", value: summary.length > 0 ? `${(totalHours / summary.length).toFixed(1)}h` : "—", sub: "Per person", color: '#81c784' },
+          { label: "Overtime", value: overtimeCount, sub: "Above normal", color: '#ffb74d' },
+          { label: "Low Hours", value: lowCount, sub: "Below average", color: '#f44747' },
         ].map((s) => (
-          <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-            <p className="text-xs text-gray-500 font-medium">{s.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${s.color === "blue" ? "text-blue-600" : s.color === "green" ? "text-green-600" : s.color === "orange" ? "text-orange-600" : "text-red-600"}`}>
-              {s.value}
-            </p>
-            <p className="text-xs text-gray-400 mt-0.5">{s.sub}</p>
+          <div key={s.label} className="rounded-xl p-4" style={{ backgroundColor: '#2d2d2d', border: '1px solid #3c3c3c' }}>
+            <p className="text-xs font-medium" style={{ color: '#858585' }}>{s.label}</p>
+            <p className="text-2xl font-bold mt-1" style={{ color: s.color }}>{s.value}</p>
+            <p className="text-xs mt-0.5" style={{ color: '#6e6e6e' }}>{s.sub}</p>
           </div>
         ))}
       </div>
@@ -77,42 +71,46 @@ export default function AttendancePage() {
               <CardTitle>Attendance Summary</CardTitle>
               <CardDescription>Last 30 days · Synced from EverSense</CardDescription>
             </div>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
+            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors" style={{ border: '1px solid #3c3c3c', color: '#999999', backgroundColor: 'transparent' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#333333')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
               <Download className="w-3 h-3" />
               Export
             </button>
           </CardHeader>
           <CardContent>
             {summary.length === 0 ? (
-              <p className="text-sm text-gray-400">No attendance data available.</p>
+              <p className="text-sm" style={{ color: '#6e6e6e' }}>No attendance data available.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">Employee</th>
-                      <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Hours</th>
-                      <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Sessions</th>
-                      <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Projects</th>
-                      <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">Status</th>
+                    <tr style={{ borderBottom: '1px solid #3c3c3c' }}>
+                      <th className="text-left py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Employee</th>
+                      <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Hours</th>
+                      <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Sessions</th>
+                      <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Projects</th>
+                      <th className="text-left py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {summary.map((s) => (
-                      <tr key={s.userId} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                      <tr key={s.userId} className="transition-colors" style={{ borderBottom: '1px solid #333333' }}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#333333')}
+                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-2">
                             <Avatar name={s.userName} size="sm" />
-                            <p className="font-medium text-gray-900">{s.userName}</p>
+                            <p className="font-medium" style={{ color: '#e0e0e0' }}>{s.userName}</p>
                           </div>
                         </td>
                         <td className="py-3 px-3 text-right">
-                          <span className={`font-semibold ${s.status === "OVERTIME" ? "text-orange-600" : s.status === "LOW" ? "text-yellow-600" : "text-gray-900"}`}>
+                          <span className="font-semibold" style={{ color: s.status === "OVERTIME" ? '#ffb74d' : s.status === "LOW" ? '#f44747' : '#e0e0e0' }}>
                             {s.totalHours.toFixed(1)}h
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-right text-gray-600">{s.sessions}</td>
-                        <td className="py-3 px-3 text-right text-gray-600">{s.projectCount}</td>
+                        <td className="py-3 px-3 text-right" style={{ color: '#cccccc' }}>{s.sessions}</td>
+                        <td className="py-3 px-3 text-right" style={{ color: '#cccccc' }}>{s.projectCount}</td>
                         <td className="py-3 px-3">
                           <Badge variant={statusBadge(s.status)}>{statusLabel(s.status)}</Badge>
                         </td>
@@ -132,22 +130,22 @@ export default function AttendancePage() {
           </CardHeader>
           <CardContent>
             {logs.length === 0 ? (
-              <p className="text-sm text-gray-400">No logs available.</p>
+              <p className="text-sm" style={{ color: '#6e6e6e' }}>No logs available.</p>
             ) : (
               <div className="space-y-3">
                 {logs.slice(0, 15).map((log) => {
                   const hours = (log.duration / 3600).toFixed(1);
                   const date = new Date(log.startTime).toLocaleDateString("en-US", { month: "short", day: "numeric" });
                   return (
-                    <div key={log.id} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+                    <div key={log.id} className="flex items-start gap-2.5 p-2.5 rounded-lg" style={{ backgroundColor: '#252526', border: '1px solid #3c3c3c' }}>
                       <Avatar name={log.userId} size="sm" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium text-gray-900 truncate">{log.userId}</p>
-                          <span className="text-xs font-semibold text-blue-600">{hours}h</span>
+                          <p className="text-xs font-medium truncate" style={{ color: '#e0e0e0' }}>{log.userId}</p>
+                          <span className="text-xs font-semibold text-blue-400">{hours}h</span>
                         </div>
-                        <p className="text-xs text-gray-500 truncate">{log.projectName ?? "General"}</p>
-                        <p className="text-xs text-gray-400">{date}</p>
+                        <p className="text-xs truncate" style={{ color: '#858585' }}>{log.projectName ?? "General"}</p>
+                        <p className="text-xs" style={{ color: '#6e6e6e' }}>{date}</p>
                       </div>
                     </div>
                   );
@@ -159,22 +157,20 @@ export default function AttendancePage() {
       </div>
 
       {overtimeCount > 0 && (
-        <Card className="border-orange-200 bg-orange-50">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-orange-800">Overtime Alert</p>
-                <p className="text-xs text-orange-700 mt-0.5">
-                  {summary.filter((s) => s.status === "OVERTIME").map((s) => `${s.userName} (${s.totalHours.toFixed(0)}h)`).join(", ")} — consider redistributing workload.
-                </p>
-              </div>
+        <div className="p-4 rounded-xl" style={{ backgroundColor: 'rgba(255,152,0,0.1)', border: '1px solid rgba(255,152,0,0.3)' }}>
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#ffb74d' }} />
+            <div>
+              <p className="text-sm font-semibold" style={{ color: '#ffb74d' }}>Overtime Alert</p>
+              <p className="text-xs mt-0.5" style={{ color: '#cc8800' }}>
+                {summary.filter((s) => s.status === "OVERTIME").map((s) => `${s.userName} (${s.totalHours.toFixed(0)}h)`).join(", ")} — consider redistributing workload.
+              </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      <div className="flex items-center gap-2 text-xs text-gray-400">
+      <div className="flex items-center gap-2 text-xs" style={{ color: '#6e6e6e' }}>
         <TrendingUp className="w-3 h-3" />
         <span>Sourced from EverSense TimeLog model · {logs.length} entries</span>
       </div>
