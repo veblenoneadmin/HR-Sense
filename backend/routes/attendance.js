@@ -27,7 +27,7 @@ router.get('/', async (req, res) => {
       id: log.id,
       userId: log.memberId ?? log.userId,
       userName: log.memberName ?? log.userName,
-      duration: log.durationMins ?? Math.round((log.duration ?? 0) / 60), // normalize to minutes
+      duration: log.durationMins != null ? log.durationMins * 60 : (log.duration ?? 0), // normalize to seconds (frontend divides by 3600)
       startTime: log.timeIn ?? log.startTime,
       endTime: log.timeOut ?? log.endTime,
       projectId: log.projectId ?? null,
@@ -44,7 +44,7 @@ router.get('/', async (req, res) => {
         const user = users.find(u => u.id === uid) ?? { id: uid, name: log.userName ?? 'Unknown' }
         userMap[uid] = { userId: uid, userName: user.name ?? log.userName, totalMinutes: 0, sessions: 0, projects: new Set() }
       }
-      userMap[uid].totalMinutes += log.duration ?? 0
+      userMap[uid].totalMinutes += (log.duration ?? 0) / 60 // duration is in seconds, accumulate minutes
       userMap[uid].sessions++
       if (log.projectId) userMap[uid].projects.add(log.projectId)
     }

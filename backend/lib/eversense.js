@@ -177,12 +177,12 @@ export async function getAttendanceLogs(orgId, params = {}, userToken) {
 
 // ─── KPI aggregation ─────────────────────────────────────────────────────────
 
-export async function buildKpiForUser(userId, period, userToken) {
+export async function buildKpiForUser(userId, period, userToken, orgId = null) {
   const [startDate, endDate] = getPeriodBounds(period)
   const [timeLogs, tasks, reports] = await Promise.all([
-    getAttendanceLogs(null, { userId, startDate, endDate }, userToken),
+    getAttendanceLogs(orgId, { userId, startDate, endDate }, userToken),
     getUserTasks(userId, { startDate, endDate }, userToken),
-    getReports(null, { userId, startDate, endDate }, userToken),
+    getReports(orgId, { userId, startDate, endDate }, userToken),
   ])
 
   const logs = timeLogs?.data ?? timeLogs?.logs ?? timeLogs ?? []
