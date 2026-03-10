@@ -3,6 +3,7 @@
  */
 import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { syncLeaveToEverSense } from '../lib/eversense.js'
 
 const router = Router()
 
@@ -73,10 +74,25 @@ router.patch('/:id/approve', async (req, res) => {
     const request = await prisma.leaveRequest.update({
       where: { id: req.params.id },
       data: { status: 'APPROVED', approvedBy, approvedAt: new Date(), notes },
+      include: { employee: { select: { esUserId: true } } },
     })
     // Update leave balance
     await _deductLeaveBalance(request.employeeId, request.type, request.days)
     res.json({ request })
+
+    // Fire-and-forget sync to EverSense (after response is sent)
+    if (request.employee?.esUserId) {
+      syncLeaveToEverSense({
+        esUserId:   request.employee.esUserId,
+        type:       request.type,
+        status:     'APPROVED',
+        startDate:  request.startDate,
+        endDate:    request.endDate,
+        days:       request.days,
+        reason:     request.reason,
+        approvedAt: request.approvedAt,
+      }).catch(err => console.error('[leaves] EverSense sync error:', err.message))
+    }
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

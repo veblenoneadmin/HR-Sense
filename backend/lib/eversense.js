@@ -114,6 +114,74 @@ async function esGet(path, params, userToken = null) {
   return res.data
 }
 
+async function esPost(path, body) {
+  const svc = await getServiceSession()
+  let { token, cookie } = svc
+
+  const res = await axios.post(`${BASE_URL}${path}`, body, {
+    headers: buildHeaders(token, cookie),
+    timeout: 10000,
+    validateStatus: () => true,
+  })
+
+  // On 401, refresh service session and retry once
+  if (res.status === 401) {
+    console.warn('[eversense] 401 on POST', path, '— trying service account fallback')
+    _cachedToken = null
+    _cachedCookie = null
+    _tokenExpiry = 0
+    const fresh = await getServiceSession()
+    if (!fresh.token) return null
+    const retry = await axios.post(`${BASE_URL}${path}`, body, {
+      headers: buildHeaders(fresh.token, fresh.cookie),
+      timeout: 10000,
+      validateStatus: () => true,
+    })
+    if (retry.status >= 400) {
+      console.error(`[eversense] POST ${path} → ${retry.status}`, JSON.stringify(retry.data).slice(0, 200))
+    }
+    return retry.data
+  }
+
+  if (res.status >= 400) {
+    console.error(`[eversense] POST ${path} → ${res.status}`, JSON.stringify(res.data).slice(0, 200))
+  }
+  return res.data
+}
+
+// ─── Leave Sync ───────────────────────────────────────────────────────────────
+
+export async function syncLeaveToEverSense(leave) {
+  const secret = process.env.INTERNAL_API_SECRET
+  if (!secret) {
+    console.warn('[eversense] INTERNAL_API_SECRET not set — skipping leave sync')
+    return
+  }
+
+  const { esUserId, type, status, startDate, endDate, days, reason, approvedAt } = leave
+
+  // Temporarily inject the secret header via axios interceptor-free approach:
+  // esPost uses service session auth — also pass the internal secret so EverSense accepts it
+  const res = await axios.post(
+    `${BASE_URL}/api/leaves`,
+    { userId: esUserId, type, status: status || 'APPROVED', startDate, endDate, days, reason, approvedAt },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': secret,
+      },
+      timeout: 10000,
+      validateStatus: () => true,
+    }
+  )
+
+  if (res.status === 201) {
+    console.log(`[eversense] ✅ Leave synced for esUserId=${esUserId} type=${type} days=${days}`)
+  } else {
+    console.error(`[eversense] ❌ Leave sync failed: ${res.status}`, JSON.stringify(res.data).slice(0, 200))
+  }
+}
+
 // ─── Employees / Users ────────────────────────────────────────────────────────
 
 export async function getOrgMembers(orgId, userToken) {
