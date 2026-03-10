@@ -111,7 +111,11 @@ export default function EmployeeDetailModal({ employee, perf, onClose, onSaved }
     (Number(form.philHealthContribution) || 0) +
     (Number(form.pagIbigContribution) || 0);
 
-  const netSalary = Math.max(0, (Number(form.baseSalary) || 0) - totalDeductions);
+  const grossSalary = Number(form.baseSalary) || 0;
+  const netSalary = Math.max(0, grossSalary - totalDeductions);
+  const semiMonthlyGross = grossSalary / 2;
+  const semiMonthlyDeductions = totalDeductions / 2;
+  const semiMonthlyNet = Math.max(0, netSalary / 2);
   const currency = employee.currency ?? "PHP";
   const tierStyle = perf ? (TIER_STYLE[perf.tier] ?? TIER_STYLE.AVERAGE) : null;
 
@@ -185,9 +189,9 @@ export default function EmployeeDetailModal({ employee, perf, onClose, onSaved }
               <Field label="Base Salary" value={form.baseSalary} type="number" onChange={set("baseSalary")} />
               <Field label="Rate per Hour (leave blank to auto-compute)" value={form.ratePerHour} type="number" onChange={set("ratePerHour")} />
             </div>
-            {Number(form.baseSalary) > 0 && (
+            {grossSalary > 0 && (
               <p className="text-xs mt-2" style={{ color: '#6e6e6e' }}>
-                Auto rate: {currency} {((Number(form.baseSalary) || 0) / (22 * 8)).toFixed(2)}/hr (22 working days × 8h)
+                Auto rate: {currency} {(grossSalary / (22 * 8)).toFixed(2)}/hr (22 working days × 8h)
               </p>
             )}
           </section>
@@ -223,24 +227,35 @@ export default function EmployeeDetailModal({ employee, perf, onClose, onSaved }
           </section>
 
           {/* Net Pay Summary */}
-          {Number(form.baseSalary) > 0 && (
+          {grossSalary > 0 && (
             <section className="rounded-lg p-4" style={{ backgroundColor: 'rgba(0,122,204,0.1)', border: '1px solid rgba(0,122,204,0.25)' }}>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-3">
                 <CreditCard className="w-4 h-4 text-blue-400" />
                 <h3 className="text-sm font-semibold" style={{ color: '#7dbfff' }}>Estimated Net Pay</h3>
               </div>
+
+              {/* Header row */}
+              <div className="grid grid-cols-3 gap-2 text-xs mb-1 font-medium" style={{ color: '#6e6e6e' }}>
+                <span></span>
+                <span className="text-right">Monthly</span>
+                <span className="text-right">Semi-Monthly</span>
+              </div>
+
               <div className="space-y-1 text-sm">
-                <div className="flex justify-between" style={{ color: '#cccccc' }}>
+                <div className="grid grid-cols-3 gap-2" style={{ color: '#cccccc' }}>
                   <span>Gross Salary</span>
-                  <span>{currency} {Number(form.baseSalary).toLocaleString()}</span>
+                  <span className="text-right">{currency} {grossSalary.toLocaleString()}</span>
+                  <span className="text-right">{currency} {semiMonthlyGross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
-                <div className="flex justify-between" style={{ color: '#f44747' }}>
-                  <span>Total Deductions (SSS + PhilHealth + PAG-IBIG)</span>
-                  <span>- {currency} {totalDeductions.toLocaleString()}</span>
+                <div className="grid grid-cols-3 gap-2" style={{ color: '#f44747' }}>
+                  <span>Deductions</span>
+                  <span className="text-right">- {currency} {totalDeductions.toLocaleString()}</span>
+                  <span className="text-right">- {currency} {semiMonthlyDeductions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
-                <div className="flex justify-between font-bold pt-1" style={{ color: '#7dbfff', borderTop: '1px solid rgba(0,122,204,0.2)' }}>
-                  <span>Estimated Net Pay</span>
-                  <span>{currency} {netSalary.toLocaleString()}</span>
+                <div className="grid grid-cols-3 gap-2 font-bold pt-1" style={{ color: '#7dbfff', borderTop: '1px solid rgba(0,122,204,0.2)' }}>
+                  <span>Net Pay</span>
+                  <span className="text-right">{currency} {netSalary.toLocaleString()}</span>
+                  <span className="text-right">{currency} {semiMonthlyNet.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </section>
