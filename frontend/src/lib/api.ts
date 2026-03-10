@@ -241,7 +241,7 @@ export interface CreateEmployeeProfileRequest {
   baseSalary?: number
   currency?: string
   startDate: string
-  departmentId: string
+  departmentId?: string
 }
 
 export interface DepartmentRow {

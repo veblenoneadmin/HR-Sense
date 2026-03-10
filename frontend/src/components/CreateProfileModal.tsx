@@ -41,7 +41,6 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
     if (!form.employeeCode.trim()) { setError("Employee code is required."); return; }
     if (!form.title.trim()) { setError("Title / position is required."); return; }
     if (!form.startDate) { setError("Start date is required."); return; }
-    if (!form.departmentId) { setError("Department is required."); return; }
     setSaving(true);
     setError("");
     try {
@@ -52,7 +51,7 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
         baseSalary: form.baseSalary ? parseFloat(form.baseSalary) : 0,
         currency: form.currency,
         startDate: form.startDate,
-        departmentId: form.departmentId,
+        departmentId: form.departmentId || undefined,
       });
 
       // Save benefit fields via PATCH if any are filled

@@ -50,8 +50,8 @@ model EmployeeProfile {
   hasHealthCard        Boolean @default(false)
   healthCardProvider   String?
 
-  departmentId String
-  department   Department @relation(fields: [departmentId], references: [id])
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
 
   leaveBalances LeaveBalance[]
   leaveRequests LeaveRequest[]
