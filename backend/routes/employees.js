@@ -89,7 +89,7 @@ router.post('/', async (req, res) => {
   try {
     const { esUserId, employeeCode, title, baseSalary, currency, startDate, departmentId } = req.body
     const profile = await prisma.employeeProfile.create({
-      data: { esUserId, employeeCode, title, baseSalary: baseSalary ?? 0, currency: currency ?? 'USD', startDate: new Date(startDate), departmentId },
+      data: { esUserId, employeeCode, title, baseSalary: baseSalary ?? 0, currency: currency ?? 'PHP', startDate: new Date(startDate), departmentId: departmentId || undefined },
       include: { department: true },
     })
     res.status(201).json({ profile })
