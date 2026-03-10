@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, UserPlus } from "lucide-react";
+import { X, UserPlus, Shield, Heart } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { employeesApi, departmentsApi, EmployeeRow, DepartmentRow } from "@/lib/api";
 
@@ -18,6 +18,14 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
     currency: "PHP",
     startDate: "",
     departmentId: "",
+    sssNumber: "",
+    sssContribution: "",
+    philHealthNumber: "",
+    philHealthContribution: "",
+    pagIbigNumber: "",
+    pagIbigContribution: "",
+    hasHealthCard: false,
+    healthCardProvider: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -46,6 +54,24 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
         startDate: form.startDate,
         departmentId: form.departmentId,
       });
+
+      // Save benefit fields via PATCH if any are filled
+      const hasExtras = form.sssNumber || form.sssContribution || form.philHealthNumber ||
+        form.philHealthContribution || form.pagIbigNumber || form.pagIbigContribution ||
+        form.hasHealthCard || form.healthCardProvider;
+      if (hasExtras) {
+        await employeesApi.update(res.profile.id, {
+          sssNumber: form.sssNumber || undefined,
+          sssContribution: form.sssContribution ? parseFloat(form.sssContribution) : 0,
+          philHealthNumber: form.philHealthNumber || undefined,
+          philHealthContribution: form.philHealthContribution ? parseFloat(form.philHealthContribution) : 0,
+          pagIbigNumber: form.pagIbigNumber || undefined,
+          pagIbigContribution: form.pagIbigContribution ? parseFloat(form.pagIbigContribution) : 0,
+          hasHealthCard: form.hasHealthCard,
+          healthCardProvider: form.healthCardProvider || undefined,
+        });
+      }
+
       const dept = departments.find(d => d.id === form.departmentId);
       onCreated({
         ...employee,
@@ -57,6 +83,14 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
         departmentId: form.departmentId,
         currency: form.currency,
         startDate: form.startDate,
+        sssNumber: form.sssNumber || undefined,
+        sssContribution: form.sssContribution ? parseFloat(form.sssContribution) : 0,
+        philHealthNumber: form.philHealthNumber || undefined,
+        philHealthContribution: form.philHealthContribution ? parseFloat(form.philHealthContribution) : 0,
+        pagIbigNumber: form.pagIbigNumber || undefined,
+        pagIbigContribution: form.pagIbigContribution ? parseFloat(form.pagIbigContribution) : 0,
+        hasHealthCard: form.hasHealthCard,
+        healthCardProvider: form.healthCardProvider || undefined,
       });
     } catch (e: any) {
       setError(e.message ?? "Create failed");
@@ -65,11 +99,21 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
     }
   }
 
-  const inputStyle = {
-    border: '1px solid #3c3c3c',
-    backgroundColor: '#1e1e1e',
-    color: '#cccccc',
+  const inputStyle = { border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e', color: '#cccccc' };
+  const focusBlur = {
+    onFocus: (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => (e.target.style.borderColor = '#007acc'),
+    onBlur: (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => (e.target.style.borderColor = '#3c3c3c'),
   };
+
+  function Field({ label, name, type = "text", placeholder }: { label: string; name: keyof typeof form; type?: string; placeholder?: string }) {
+    return (
+      <div className="space-y-1">
+        <label className="text-xs" style={{ color: '#858585' }}>{label}</label>
+        <input type={type} value={form[name] as string} onChange={set(name)} placeholder={placeholder}
+          className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle} {...focusBlur} />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -77,7 +121,7 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
       style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-md rounded-xl flex flex-col overflow-hidden" style={{ backgroundColor: '#252526', border: '1px solid #3c3c3c', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}>
+      <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl overflow-hidden" style={{ backgroundColor: '#252526', border: '1px solid #3c3c3c', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid #3c3c3c' }}>
           <div className="flex items-center gap-3">
@@ -95,70 +139,70 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-4 overflow-y-auto">
-          <div className="space-y-1">
-            <label className="text-xs" style={{ color: '#858585' }}>Employee Code *</label>
-            <input value={form.employeeCode} onChange={set("employeeCode")} placeholder="e.g. EMP-001"
-              className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none"
-              style={inputStyle}
-              onFocus={e => (e.target.style.borderColor = '#007acc')}
-              onBlur={e => (e.target.style.borderColor = '#3c3c3c')} />
-          </div>
+        <div className="p-6 space-y-5 overflow-y-auto flex-1">
 
-          <div className="space-y-1">
-            <label className="text-xs" style={{ color: '#858585' }}>Title / Position *</label>
-            <input value={form.title} onChange={set("title")} placeholder="e.g. Software Engineer"
-              className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none"
-              style={inputStyle}
-              onFocus={e => (e.target.style.borderColor = '#007acc')}
-              onBlur={e => (e.target.style.borderColor = '#3c3c3c')} />
+          {/* Basic Info */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Employee Code *" name="employeeCode" placeholder="e.g. EMP-001" />
+            <Field label="Title / Position *" name="title" placeholder="e.g. Software Engineer" />
           </div>
 
           <div className="space-y-1">
             <label className="text-xs" style={{ color: '#858585' }}>Department *</label>
             <select value={form.departmentId} onChange={set("departmentId")}
-              className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none"
-              style={inputStyle}
-              onFocus={e => (e.target.style.borderColor = '#007acc')}
-              onBlur={e => (e.target.style.borderColor = '#3c3c3c')}>
+              className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle} {...focusBlur}>
               <option value="">Select department…</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
+              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs" style={{ color: '#858585' }}>Start Date *</label>
-            <input type="date" value={form.startDate} onChange={set("startDate")}
-              className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none"
-              style={inputStyle}
-              onFocus={e => (e.target.style.borderColor = '#007acc')}
-              onBlur={e => (e.target.style.borderColor = '#3c3c3c')} />
-          </div>
+          <Field label="Start Date *" name="startDate" type="date" />
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs" style={{ color: '#858585' }}>Base Salary</label>
-              <input type="number" min="0" step="0.01" value={form.baseSalary} onChange={set("baseSalary")} placeholder="0"
-                className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none"
-                style={inputStyle}
-                onFocus={e => (e.target.style.borderColor = '#007acc')}
-                onBlur={e => (e.target.style.borderColor = '#3c3c3c')} />
-            </div>
+            <Field label="Base Salary" name="baseSalary" type="number" placeholder="0" />
             <div className="space-y-1">
               <label className="text-xs" style={{ color: '#858585' }}>Currency</label>
               <select value={form.currency} onChange={set("currency")}
-                className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none"
-                style={inputStyle}
-                onFocus={e => (e.target.style.borderColor = '#007acc')}
-                onBlur={e => (e.target.style.borderColor = '#3c3c3c')}>
+                className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle} {...focusBlur}>
                 <option value="PHP">PHP</option>
                 <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
                 <option value="SGD">SGD</option>
               </select>
             </div>
+          </div>
+
+          {/* Government Contributions */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Shield className="w-4 h-4 text-green-400" />
+              <h3 className="text-sm font-semibold" style={{ color: '#e0e0e0' }}>Government Contributions</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="SSS Number" name="sssNumber" placeholder="XX-XXXXXXX-X" />
+              <Field label="SSS Contribution / mo" name="sssContribution" type="number" placeholder="0" />
+              <Field label="PhilHealth Number" name="philHealthNumber" placeholder="XXXX-XXXX-XXXX" />
+              <Field label="PhilHealth Contribution / mo" name="philHealthContribution" type="number" placeholder="0" />
+              <Field label="PAG-IBIG Number" name="pagIbigNumber" placeholder="XXXX-XXXX-XXXX" />
+              <Field label="PAG-IBIG Contribution / mo" name="pagIbigContribution" type="number" placeholder="0" />
+            </div>
+          </div>
+
+          {/* Health Card */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Heart className="w-4 h-4 text-red-400" />
+              <h3 className="text-sm font-semibold" style={{ color: '#e0e0e0' }}>Health Card / HMO</h3>
+            </div>
+            <div className="flex items-center justify-between py-1.5 mb-2">
+              <span className="text-xs" style={{ color: '#858585' }}>Has Health Card</span>
+              <input type="checkbox" checked={form.hasHealthCard}
+                onChange={e => setForm(f => ({ ...f, hasHealthCard: e.target.checked }))}
+                className="w-4 h-4 accent-blue-500" />
+            </div>
+            {form.hasHealthCard && (
+              <Field label="HMO Provider" name="healthCardProvider" placeholder="e.g. Maxicare, Intellicare" />
+            )}
           </div>
 
           {error && (
