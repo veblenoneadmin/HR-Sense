@@ -1,9 +1,143 @@
 import { useState, useEffect } from "react";
-import { CalendarOff, CheckCircle2, XCircle, Clock, Plus } from "lucide-react";
+import { CalendarOff, CheckCircle2, XCircle, Clock, Plus, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
-import { leavesApi, employeesApi, getOrgId, LeaveRequestRow, EmployeeRow } from "@/lib/api";
+import { leavesApi, employeesApi, getOrgId, LeaveRequestRow, EmployeeRow, CreateLeaveRequest } from "@/lib/api";
+
+const inputCls = "w-full px-2.5 py-1.5 text-sm rounded-md outline-none";
+const inputSx: React.CSSProperties = { border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e', color: '#cccccc' };
+function onFocus(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) { e.target.style.borderColor = '#007acc'; }
+function onBlur(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) { e.target.style.borderColor = '#3c3c3c'; }
+function Label({ text }: { text: string }) {
+  return <label className="text-xs block mb-1" style={{ color: '#858585' }}>{text}</label>;
+}
+
+// Count weekdays (Mon–Fri) inclusive between two date strings
+function countWeekdays(start: string, end: string): number {
+  if (!start || !end) return 0;
+  const s = new Date(start), e = new Date(end);
+  if (s > e) return 0;
+  let count = 0;
+  const cur = new Date(s);
+  while (cur <= e) {
+    const d = cur.getDay();
+    if (d !== 0 && d !== 6) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+function NewLeaveModal({ employees, onClose, onCreated }: {
+  employees: EmployeeRow[];
+  onClose: () => void;
+  onCreated: (leave: LeaveRequestRow) => void;
+}) {
+  const eligible = employees.filter(e => e.profileId);
+  const [form, setForm] = useState({ employeeId: eligible[0]?.profileId ?? '', type: 'ANNUAL', startDate: '', endDate: '', reason: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const days = countWeekdays(form.startDate, form.endDate);
+
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  async function handleSubmit() {
+    if (!form.employeeId) { setError('Select an employee.'); return; }
+    if (!form.startDate || !form.endDate) { setError('Start and end date are required.'); return; }
+    if (days < 1) { setError('End date must be on or after start date.'); return; }
+    if (!form.reason.trim()) { setError('Reason is required.'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const body: CreateLeaveRequest = { employeeId: form.employeeId, type: form.type, startDate: form.startDate, endDate: form.endDate, days, reason: form.reason.trim() };
+      const res = await leavesApi.create(body);
+      onCreated(res.request);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to create request.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-md rounded-xl overflow-hidden flex flex-col" style={{ backgroundColor: '#252526', border: '1px solid #3c3c3c', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid #3c3c3c' }}>
+          <h2 className="font-bold text-sm" style={{ color: '#e0e0e0' }}>New Leave Request</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg" style={{ color: '#6e6e6e' }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#333333'; e.currentTarget.style.color = '#cccccc'; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#6e6e6e'; }}>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4">
+          <div className="space-y-1">
+            <Label text="Employee *" />
+            <select value={form.employeeId} onChange={e => set('employeeId', e.target.value)} className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur}>
+              {eligible.length === 0 && <option value="">No employees with HR profile</option>}
+              {eligible.map(e => <option key={e.profileId} value={e.profileId!}>{e.name}{e.title ? ` — ${e.title}` : ''}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <Label text="Leave Type *" />
+            <select value={form.type} onChange={e => set('type', e.target.value)} className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur}>
+              {['ANNUAL','SICK','UNPAID','MATERNITY','PATERNITY','BEREAVEMENT'].map(t => <option key={t} value={t}>{t.charAt(0) + t.slice(1).toLowerCase()}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label text="Start Date *" />
+              <input type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+            </div>
+            <div className="space-y-1">
+              <Label text="End Date *" />
+              <input type="date" value={form.endDate} onChange={e => set('endDate', e.target.value)} className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+            </div>
+          </div>
+
+          {days > 0 && (
+            <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: 'rgba(0,122,204,0.1)', border: '1px solid rgba(0,122,204,0.25)', color: '#7dbfff' }}>
+              {days} working day{days !== 1 ? 's' : ''} (weekdays only)
+            </p>
+          )}
+
+          <div className="space-y-1">
+            <Label text="Reason *" />
+            <textarea name="reason" value={form.reason} onChange={e => set('reason', e.target.value)} rows={3} placeholder="Briefly describe the reason…"
+              className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none resize-none" style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+          </div>
+
+          {error && <p className="text-xs rounded-lg px-3 py-2" style={{ color: '#f44747', backgroundColor: 'rgba(244,71,71,0.1)', border: '1px solid rgba(244,71,71,0.25)' }}>{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid #3c3c3c', backgroundColor: '#1e1e1e' }}>
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg"
+            style={{ border: '1px solid #3c3c3c', color: '#999999', backgroundColor: 'transparent' }}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#333333')}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={saving}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ backgroundColor: '#0e639c' }}
+            onMouseEnter={e => { if (!saving) e.currentTarget.style.backgroundColor = '#1177bb'; }}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#0e639c')}>
+            <Plus className="w-3.5 h-3.5" />
+            {saving ? 'Submitting…' : 'Submit Request'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const LEAVE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   ANNUAL:      { bg: 'rgba(0,122,204,0.15)',    color: '#7dbfff' },
@@ -26,6 +160,7 @@ export default function LeavePage() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<FilterType>("ALL");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showNewModal, setShowNewModal] = useState(false);
 
   const loadData = () => {
     const orgId = getOrgId();
@@ -94,7 +229,7 @@ export default function LeavePage() {
             </button>
           ))}
         </div>
-        <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm text-white bg-blue-600 hover:bg-blue-500 transition-colors">
+        <button onClick={() => setShowNewModal(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm text-white bg-blue-600 hover:bg-blue-500 transition-colors">
           <Plus className="w-3.5 h-3.5" />
           New Request
         </button>
@@ -216,6 +351,17 @@ export default function LeavePage() {
           </Card>
         </div>
       </div>
+
+      {showNewModal && (
+        <NewLeaveModal
+          employees={Object.values(empMap)}
+          onClose={() => setShowNewModal(false)}
+          onCreated={(leave) => {
+            setLeaves(prev => [leave, ...prev]);
+            setShowNewModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }
