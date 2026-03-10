@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { X, UserPlus, Shield, Heart, CreditCard } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { employeesApi, departmentsApi, EmployeeRow, DepartmentRow } from "@/lib/api";
@@ -9,44 +9,23 @@ interface Props {
   onCreated: (updated: EmployeeRow) => void;
 }
 
-const inputStyle = { border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e', color: '#cccccc' };
-const handleFocus = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => (e.target.style.borderColor = '#007acc');
-const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => (e.target.style.borderColor = '#3c3c3c');
+const inputCls = "w-full px-2.5 py-1.5 text-sm rounded-md outline-none";
+const inputSx: React.CSSProperties = { border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e', color: '#cccccc' };
 
-function Field({ label, value, onChange, type = "text", placeholder }: {
-  label: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  type?: string;
-  placeholder?: string;
-}) {
-  return (
-    <div className="space-y-1">
-      <label className="text-xs" style={{ color: '#858585' }}>{label}</label>
-      <input type={type} value={value} onChange={onChange} placeholder={placeholder}
-        className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle}
-        onFocus={handleFocus} onBlur={handleBlur} />
-    </div>
-  );
+function onFocus(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) { e.target.style.borderColor = '#007acc'; }
+function onBlur(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) { e.target.style.borderColor = '#3c3c3c'; }
+
+function Label({ text }: { text: string }) {
+  return <label className="text-xs block mb-1" style={{ color: '#858585' }}>{text}</label>;
 }
 
 export default function CreateProfileModal({ employee, onClose, onCreated }: Props) {
   const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [form, setForm] = useState({
-    employeeCode: "",
-    title: "",
-    baseSalary: "",
-    currency: "PHP",
-    startDate: "",
-    departmentId: "",
-    sssNumber: "",
-    sssContribution: "",
-    philHealthNumber: "",
-    philHealthContribution: "",
-    pagIbigNumber: "",
-    pagIbigContribution: "",
-    hasHealthCard: false,
-    healthCardProvider: "",
+    employeeCode: "", title: "", baseSalary: "", currency: "PHP", startDate: "",
+    departmentId: "", sssNumber: "", sssContribution: "", philHealthNumber: "",
+    philHealthContribution: "", pagIbigNumber: "", pagIbigContribution: "",
+    hasHealthCard: false, healthCardProvider: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -55,8 +34,11 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
     departmentsApi.list().then(r => setDepartments(r.departments)).catch(() => {});
   }, []);
 
-  const setField = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm(f => ({ ...f, [key]: e.target.value }));
+  // Single stable handler — reads field name from input's name attribute
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setForm(f => ({ ...f, [name]: value }));
+  }, []);
 
   async function handleSave() {
     if (!form.employeeCode.trim()) { setError("Employee code is required."); return; }
@@ -124,12 +106,12 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
   const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl overflow-hidden" style={{ backgroundColor: '#252526', border: '1px solid #3c3c3c', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}>
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl overflow-hidden"
+        style={{ backgroundColor: '#252526', border: '1px solid #3c3c3c', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}>
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid #3c3c3c' }}>
           <div className="flex items-center gap-3">
@@ -151,29 +133,43 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
 
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Employee Code *" value={form.employeeCode} onChange={setField("employeeCode")} placeholder="e.g. EMP-001" />
-            <Field label="Title / Position *" value={form.title} onChange={setField("title")} placeholder="e.g. Software Engineer" />
+            <div className="space-y-1">
+              <Label text="Employee Code *" />
+              <input name="employeeCode" value={form.employeeCode} onChange={handleChange} placeholder="e.g. EMP-001"
+                className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+            </div>
+            <div className="space-y-1">
+              <Label text="Title / Position *" />
+              <input name="title" value={form.title} onChange={handleChange} placeholder="e.g. Software Engineer"
+                className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+            </div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs" style={{ color: '#858585' }}>Department (optional)</label>
-            <select value={form.departmentId} onChange={setField("departmentId")}
-              className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle}
-              onFocus={handleFocus} onBlur={handleBlur}>
+            <Label text="Department (optional)" />
+            <select name="departmentId" value={form.departmentId} onChange={handleChange}
+              className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur}>
               <option value="">Select department…</option>
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
 
-          <Field label="Start Date *" value={form.startDate} onChange={setField("startDate")} type="date" />
+          <div className="space-y-1">
+            <Label text="Start Date *" />
+            <input name="startDate" type="date" value={form.startDate} onChange={handleChange}
+              className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Base Salary" value={form.baseSalary} onChange={setField("baseSalary")} type="number" placeholder="0" />
             <div className="space-y-1">
-              <label className="text-xs" style={{ color: '#858585' }}>Currency</label>
-              <select value={form.currency} onChange={setField("currency")}
-                className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle}
-                onFocus={handleFocus} onBlur={handleBlur}>
+              <Label text="Base Salary" />
+              <input name="baseSalary" type="number" min="0" step="0.01" value={form.baseSalary} onChange={handleChange} placeholder="0"
+                className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+            </div>
+            <div className="space-y-1">
+              <Label text="Currency" />
+              <select name="currency" value={form.currency} onChange={handleChange}
+                className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur}>
                 <option value="PHP">PHP</option>
                 <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
@@ -189,12 +185,36 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
               <h3 className="text-sm font-semibold" style={{ color: '#e0e0e0' }}>Government Contributions</h3>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="SSS Number" value={form.sssNumber} onChange={setField("sssNumber")} placeholder="XX-XXXXXXX-X" />
-              <Field label="SSS Contribution / mo" value={form.sssContribution} onChange={setField("sssContribution")} type="number" placeholder="0" />
-              <Field label="PhilHealth Number" value={form.philHealthNumber} onChange={setField("philHealthNumber")} placeholder="XXXX-XXXX-XXXX" />
-              <Field label="PhilHealth Contribution / mo" value={form.philHealthContribution} onChange={setField("philHealthContribution")} type="number" placeholder="0" />
-              <Field label="PAG-IBIG Number" value={form.pagIbigNumber} onChange={setField("pagIbigNumber")} placeholder="XXXX-XXXX-XXXX" />
-              <Field label="PAG-IBIG Contribution / mo" value={form.pagIbigContribution} onChange={setField("pagIbigContribution")} type="number" placeholder="0" />
+              <div className="space-y-1">
+                <Label text="SSS Number" />
+                <input name="sssNumber" value={form.sssNumber} onChange={handleChange} placeholder="XX-XXXXXXX-X"
+                  className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+              </div>
+              <div className="space-y-1">
+                <Label text="SSS Contribution / mo" />
+                <input name="sssContribution" type="number" min="0" step="0.01" value={form.sssContribution} onChange={handleChange} placeholder="0"
+                  className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+              </div>
+              <div className="space-y-1">
+                <Label text="PhilHealth Number" />
+                <input name="philHealthNumber" value={form.philHealthNumber} onChange={handleChange} placeholder="XXXX-XXXX-XXXX"
+                  className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+              </div>
+              <div className="space-y-1">
+                <Label text="PhilHealth Contribution / mo" />
+                <input name="philHealthContribution" type="number" min="0" step="0.01" value={form.philHealthContribution} onChange={handleChange} placeholder="0"
+                  className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+              </div>
+              <div className="space-y-1">
+                <Label text="PAG-IBIG Number" />
+                <input name="pagIbigNumber" value={form.pagIbigNumber} onChange={handleChange} placeholder="XXXX-XXXX-XXXX"
+                  className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+              </div>
+              <div className="space-y-1">
+                <Label text="PAG-IBIG Contribution / mo" />
+                <input name="pagIbigContribution" type="number" min="0" step="0.01" value={form.pagIbigContribution} onChange={handleChange} placeholder="0"
+                  className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+              </div>
             </div>
           </div>
 
@@ -211,7 +231,11 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
                 className="w-4 h-4 accent-blue-500" />
             </div>
             {form.hasHealthCard && (
-              <Field label="HMO Provider" value={form.healthCardProvider} onChange={setField("healthCardProvider")} placeholder="e.g. Maxicare, Intellicare" />
+              <div className="space-y-1">
+                <Label text="HMO Provider" />
+                <input name="healthCardProvider" value={form.healthCardProvider} onChange={handleChange} placeholder="e.g. Maxicare, Intellicare"
+                  className={inputCls} style={inputSx} onFocus={onFocus} onBlur={onBlur} />
+              </div>
             )}
           </div>
 
