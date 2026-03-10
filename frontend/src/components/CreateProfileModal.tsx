@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, UserPlus, Shield, Heart } from "lucide-react";
+import { X, UserPlus, Shield, Heart, CreditCard } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { employeesApi, departmentsApi, EmployeeRow, DepartmentRow } from "@/lib/api";
 
@@ -204,6 +204,47 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
               <Field label="HMO Provider" name="healthCardProvider" placeholder="e.g. Maxicare, Intellicare" />
             )}
           </div>
+
+          {/* Live Pay Computation */}
+          {(() => {
+            const gross = parseFloat(form.baseSalary) || 0;
+            if (gross <= 0) return null;
+            const deductions = (parseFloat(form.sssContribution) || 0) + (parseFloat(form.philHealthContribution) || 0) + (parseFloat(form.pagIbigContribution) || 0);
+            const net = Math.max(0, gross - deductions);
+            const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return (
+              <section className="rounded-lg p-4" style={{ backgroundColor: 'rgba(0,122,204,0.1)', border: '1px solid rgba(0,122,204,0.25)' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <CreditCard className="w-4 h-4 text-blue-400" />
+                  <h3 className="text-sm font-semibold" style={{ color: '#7dbfff' }}>Estimated Net Pay</h3>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs mb-1 font-medium" style={{ color: '#6e6e6e' }}>
+                  <span></span>
+                  <span className="text-right">Monthly</span>
+                  <span className="text-right">Semi-Monthly</span>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="grid grid-cols-3 gap-2" style={{ color: '#cccccc' }}>
+                    <span>Gross Salary</span>
+                    <span className="text-right">{form.currency} {fmt(gross)}</span>
+                    <span className="text-right">{form.currency} {fmt(gross / 2)}</span>
+                  </div>
+                  {deductions > 0 && (
+                    <div className="grid grid-cols-3 gap-2" style={{ color: '#f44747' }}>
+                      <span>Deductions</span>
+                      <span className="text-right">- {form.currency} {fmt(deductions)}</span>
+                      <span className="text-right">- {form.currency} {fmt(deductions / 2)}</span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-3 gap-2 font-bold pt-1" style={{ color: '#7dbfff', borderTop: '1px solid rgba(0,122,204,0.2)' }}>
+                    <span>Net Pay</span>
+                    <span className="text-right">{form.currency} {fmt(net)}</span>
+                    <span className="text-right">{form.currency} {fmt(net / 2)}</span>
+                  </div>
+                </div>
+              </section>
+            );
+          })()}
 
           {error && (
             <p className="text-xs rounded-lg px-3 py-2" style={{ color: '#f44747', backgroundColor: 'rgba(244,71,71,0.1)', border: '1px solid rgba(244,71,71,0.25)' }}>{error}</p>
