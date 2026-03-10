@@ -3,7 +3,7 @@ import { DollarSign, Download, TrendingUp, Clock, Users, Zap } from "lucide-reac
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
-import { payrollApi, employeesApi, performanceApi, getOrgId, PayrollRecordRow, EmployeeRow, KpiMetric } from "@/lib/api";
+import { payrollApi, employeesApi, performanceApi, attendanceApi, getOrgId, PayrollRecordRow, EmployeeRow, KpiMetric } from "@/lib/api";
 
 const STATUS_VARIANT: Record<string, "default" | "success" | "destructive" | "warning" | "secondary"> = {
   PAID: "success", PROCESSED: "default", DRAFT: "secondary",
@@ -31,12 +31,19 @@ export default function PayrollPage() {
   const loadData = (p: string) => {
     const orgId = getOrgId();
     setLoading(true);
+
+    const [year, month] = p.split('-').map(Number);
+    const startDate = `${p}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${p}-${String(lastDay).padStart(2, '0')}`;
+
     Promise.all([
       payrollApi.list(p),
       employeesApi.list(orgId),
       performanceApi.list(orgId, p),
+      attendanceApi.get(orgId, startDate, endDate).catch(() => null),
     ])
-      .then(([payrollRes, empRes, perfRes]) => {
+      .then(([payrollRes, empRes, perfRes, attendanceRes]) => {
         setRecords(payrollRes.records);
         setSummary(payrollRes.summary);
         setEmployees(empRes.employees);
@@ -44,6 +51,31 @@ export default function PayrollPage() {
         const map: Record<string, EmployeeRow> = {};
         empRes.employees.forEach((e) => { map[e.id] = e; });
         setEmpMap(map);
+
+        if (attendanceRes) {
+          // Count working days (Mon–Fri) in the month
+          let workingDays = 0;
+          for (let day = 1; day <= lastDay; day++) {
+            const dow = new Date(year, month - 1, day).getDay();
+            if (dow !== 0 && dow !== 6) workingDays++;
+          }
+
+          // Collect unique attendance dates per userId
+          const presenceDates: Record<string, Set<string>> = {};
+          for (const log of attendanceRes.logs) {
+            const date = log.startTime.slice(0, 10);
+            if (!presenceDates[log.userId]) presenceDates[log.userId] = new Set();
+            presenceDates[log.userId].add(date);
+          }
+
+          // absent = workingDays - daysPresent (floored at 0)
+          const computed: Record<string, number> = {};
+          empRes.employees.forEach(e => {
+            const daysPresent = presenceDates[e.id]?.size ?? 0;
+            computed[e.id] = Math.max(0, workingDays - daysPresent);
+          });
+          setAbsentDays(computed);
+        }
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
