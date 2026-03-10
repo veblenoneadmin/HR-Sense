@@ -73,6 +73,7 @@ export default function EmployeeDetailModal({ employee, perf, onClose, onSaved }
     pagIbigContribution: employee.pagIbigContribution ?? 0,
     hasHealthCard: employee.hasHealthCard ?? false,
     healthCardProvider: employee.healthCardProvider ?? "",
+    absentDays: 0,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -106,15 +107,17 @@ export default function EmployeeDetailModal({ employee, perf, onClose, onSaved }
     }
   }
 
-  const totalDeductions =
+  const govDeductions =
     (Number(form.sssContribution) || 0) +
     (Number(form.philHealthContribution) || 0) +
     (Number(form.pagIbigContribution) || 0);
 
   const grossSalary = Number(form.baseSalary) || 0;
+  const dailyRate = grossSalary / 22;
+  const absenceDeduction = dailyRate * (Number(form.absentDays) || 0);
+  const totalDeductions = govDeductions + absenceDeduction;
   const netSalary = Math.max(0, grossSalary - totalDeductions);
   const semiMonthlyGross = grossSalary / 2;
-  const semiMonthlyDeductions = totalDeductions / 2;
   const semiMonthlyNet = Math.max(0, netSalary / 2);
   const currency = employee.currency ?? "PHP";
   const tierStyle = perf ? (TIER_STYLE[perf.tier] ?? TIER_STYLE.AVERAGE) : null;
@@ -188,6 +191,15 @@ export default function EmployeeDetailModal({ employee, perf, onClose, onSaved }
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Base Salary" value={form.baseSalary} type="number" onChange={set("baseSalary")} />
               <Field label="Rate per Hour (leave blank to auto-compute)" value={form.ratePerHour} type="number" onChange={set("ratePerHour")} />
+              <Field label="Absent Days (this period)" value={form.absentDays} type="number" onChange={set("absentDays")} />
+              {grossSalary > 0 && (
+                <div className="flex items-end pb-1">
+                  <p className="text-xs" style={{ color: '#6e6e6e' }}>
+                    Daily rate: {currency} {dailyRate.toFixed(2)}/day (base ÷ 22)
+                    {absenceDeduction > 0 && <span style={{ color: '#f44747' }}> · -{currency} {absenceDeduction.toFixed(2)} deducted</span>}
+                  </p>
+                </div>
+              )}
             </div>
             {grossSalary > 0 && (
               <p className="text-xs mt-2" style={{ color: '#6e6e6e' }}>
@@ -247,11 +259,20 @@ export default function EmployeeDetailModal({ employee, perf, onClose, onSaved }
                   <span className="text-right">{currency} {grossSalary.toLocaleString()}</span>
                   <span className="text-right">{currency} {semiMonthlyGross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2" style={{ color: '#f44747' }}>
-                  <span>Deductions</span>
-                  <span className="text-right">- {currency} {totalDeductions.toLocaleString()}</span>
-                  <span className="text-right">- {currency} {semiMonthlyDeductions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
+                {govDeductions > 0 && (
+                  <div className="grid grid-cols-3 gap-2" style={{ color: '#f44747' }}>
+                    <span>Gov't Contributions</span>
+                    <span className="text-right">- {currency} {govDeductions.toLocaleString()}</span>
+                    <span className="text-right">- {currency} {(govDeductions / 2).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                {absenceDeduction > 0 && (
+                  <div className="grid grid-cols-3 gap-2" style={{ color: '#ffb74d' }}>
+                    <span>Absences ({form.absentDays}d × {currency} {dailyRate.toFixed(2)})</span>
+                    <span className="text-right">- {currency} {absenceDeduction.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className="text-right">- {currency} {(absenceDeduction / 2).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-2 font-bold pt-1" style={{ color: '#7dbfff', borderTop: '1px solid rgba(0,122,204,0.2)' }}>
                   <span>Net Pay</span>
                   <span className="text-right">{currency} {netSalary.toLocaleString()}</span>

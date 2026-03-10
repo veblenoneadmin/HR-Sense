@@ -26,6 +26,7 @@ export default function PayrollPage() {
   const [error, setError] = useState("");
   const [period, setPeriod] = useState(currentPeriod());
   const [view, setView] = useState<"records" | "live">("live");
+  const [absentDays, setAbsentDays] = useState<Record<string, number>>({});
 
   const loadData = (p: string) => {
     const orgId = getOrgId();
@@ -59,10 +60,13 @@ export default function PayrollPage() {
     .filter(e => e.profileId && (e.baseSalary ?? 0) > 0)
     .map(e => {
       const gross = e.baseSalary ?? 0;
-      const deductions = (e.sssContribution ?? 0) + (e.philHealthContribution ?? 0) + (e.pagIbigContribution ?? 0);
+      const dailyRate = gross / 22;
+      const govDeductions = (e.sssContribution ?? 0) + (e.philHealthContribution ?? 0) + (e.pagIbigContribution ?? 0);
+      const absenceDeduction = dailyRate * (absentDays[e.id] ?? 0);
+      const deductions = govDeductions + absenceDeduction;
       const net = Math.max(0, gross - deductions);
       const perf = perfMap[e.id];
-      return { emp: e, gross, deductions, net, hours: perf?.hoursLogged ?? 0 };
+      return { emp: e, gross, dailyRate, govDeductions, absenceDeduction, deductions, net, hours: perf?.hoursLogged ?? 0 };
     });
 
   const liveGrossTotal = liveRows.reduce((a, r) => a + r.gross, 0);
@@ -184,14 +188,16 @@ export default function PayrollPage() {
                       <tr style={{ borderBottom: '1px solid #3c3c3c' }}>
                         <th className="text-left py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Employee</th>
                         <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Gross / mo</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Deductions</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Gov't Deductions</th>
+                        <th className="text-center py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Absent Days</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Absence Deduction</th>
                         <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Net / mo</th>
                         <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Semi-Monthly</th>
                         <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: '#858585' }}>Hours</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {liveRows.map(({ emp, gross, deductions, net, hours }) => (
+                      {liveRows.map(({ emp, gross, govDeductions, absenceDeduction, net, hours }) => (
                         <tr key={emp.id} className="transition-colors" style={{ borderBottom: '1px solid #333333' }}
                           onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#333333')}
                           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
@@ -206,8 +212,24 @@ export default function PayrollPage() {
                           </td>
                           <td className="py-3 px-3 text-right" style={{ color: '#cccccc' }}>{currency} {fmt(gross)}</td>
                           <td className="py-3 px-3 text-right">
-                            {deductions > 0
-                              ? <span style={{ color: '#f44747' }}>- {currency} {fmt(deductions)}</span>
+                            {govDeductions > 0
+                              ? <span style={{ color: '#f44747' }}>- {currency} {fmt(govDeductions)}</span>
+                              : <span style={{ color: '#6e6e6e' }}>—</span>}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <input
+                              type="number" min="0" max="31"
+                              value={absentDays[emp.id] ?? 0}
+                              onChange={e => setAbsentDays(prev => ({ ...prev, [emp.id]: Math.max(0, parseInt(e.target.value) || 0) }))}
+                              className="w-14 px-2 py-1 text-sm text-center rounded outline-none"
+                              style={{ border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e', color: '#ffb74d' }}
+                              onFocus={e => (e.target.style.borderColor = '#007acc')}
+                              onBlur={e => (e.target.style.borderColor = '#3c3c3c')}
+                            />
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            {absenceDeduction > 0
+                              ? <span style={{ color: '#ffb74d' }}>- {currency} {fmt(absenceDeduction)}</span>
                               : <span style={{ color: '#6e6e6e' }}>—</span>}
                           </td>
                           <td className="py-3 px-3 text-right font-semibold" style={{ color: '#81c784' }}>{currency} {fmt(net)}</td>
@@ -224,7 +246,11 @@ export default function PayrollPage() {
                           <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Total ({liveRows.length})</span>
                         </td>
                         <td className="py-3 px-3 text-right font-semibold" style={{ color: '#cccccc' }}>{currency} {fmt(liveGrossTotal)}</td>
-                        <td className="py-3 px-3 text-right font-semibold" style={{ color: '#f44747' }}>- {currency} {fmt(liveDeductTotal)}</td>
+                        <td className="py-3 px-3 text-right font-semibold" style={{ color: '#f44747' }}>- {currency} {fmt(liveRows.reduce((a, r) => a + r.govDeductions, 0))}</td>
+                        <td className="py-3 px-3 text-center font-semibold" style={{ color: '#ffb74d' }}>
+                          {liveRows.reduce((a, r) => a + (absentDays[r.emp.id] ?? 0), 0)}d
+                        </td>
+                        <td className="py-3 px-3 text-right font-semibold" style={{ color: '#ffb74d' }}>- {currency} {fmt(liveRows.reduce((a, r) => a + r.absenceDeduction, 0))}</td>
                         <td className="py-3 px-3 text-right font-bold" style={{ color: '#81c784' }}>{currency} {fmt(liveNetTotal)}</td>
                         <td className="py-3 px-3 text-right font-bold" style={{ color: '#7dbfff' }}>{currency} {fmt(liveNetTotal / 2)}</td>
                         <td className="py-3 px-3 text-right font-semibold" style={{ color: '#cccccc' }}>
