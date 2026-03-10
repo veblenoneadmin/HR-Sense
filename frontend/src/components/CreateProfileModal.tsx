@@ -9,6 +9,27 @@ interface Props {
   onCreated: (updated: EmployeeRow) => void;
 }
 
+const inputStyle = { border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e', color: '#cccccc' };
+const handleFocus = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => (e.target.style.borderColor = '#007acc');
+const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => (e.target.style.borderColor = '#3c3c3c');
+
+function Field({ label, value, onChange, type = "text", placeholder }: {
+  label: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  type?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-xs" style={{ color: '#858585' }}>{label}</label>
+      <input type={type} value={value} onChange={onChange} placeholder={placeholder}
+        className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle}
+        onFocus={handleFocus} onBlur={handleBlur} />
+    </div>
+  );
+}
+
 export default function CreateProfileModal({ employee, onClose, onCreated }: Props) {
   const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [form, setForm] = useState({
@@ -34,7 +55,7 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
     departmentsApi.list().then(r => setDepartments(r.departments)).catch(() => {});
   }, []);
 
-  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  const setField = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [key]: e.target.value }));
 
   async function handleSave() {
@@ -54,7 +75,6 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
         departmentId: form.departmentId || undefined,
       });
 
-      // Save benefit fields via PATCH if any are filled
       const hasExtras = form.sssNumber || form.sssContribution || form.philHealthNumber ||
         form.philHealthContribution || form.pagIbigNumber || form.pagIbigContribution ||
         form.hasHealthCard || form.healthCardProvider;
@@ -79,7 +99,7 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
         title: res.profile.title,
         baseSalary: res.profile.baseSalary,
         department: dept?.name,
-        departmentId: form.departmentId,
+        departmentId: form.departmentId || undefined,
         currency: form.currency,
         startDate: form.startDate,
         sssNumber: form.sssNumber || undefined,
@@ -98,21 +118,10 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
     }
   }
 
-  const inputStyle = { border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e', color: '#cccccc' };
-  const focusBlur = {
-    onFocus: (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => (e.target.style.borderColor = '#007acc'),
-    onBlur: (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => (e.target.style.borderColor = '#3c3c3c'),
-  };
-
-  function Field({ label, name, type = "text", placeholder }: { label: string; name: keyof typeof form; type?: string; placeholder?: string }) {
-    return (
-      <div className="space-y-1">
-        <label className="text-xs" style={{ color: '#858585' }}>{label}</label>
-        <input type={type} value={form[name] as string} onChange={set(name)} placeholder={placeholder}
-          className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle} {...focusBlur} />
-      </div>
-    );
-  }
+  const gross = parseFloat(form.baseSalary) || 0;
+  const deductions = (parseFloat(form.sssContribution) || 0) + (parseFloat(form.philHealthContribution) || 0) + (parseFloat(form.pagIbigContribution) || 0);
+  const net = Math.max(0, gross - deductions);
+  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div
@@ -142,27 +151,29 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
 
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Employee Code *" name="employeeCode" placeholder="e.g. EMP-001" />
-            <Field label="Title / Position *" name="title" placeholder="e.g. Software Engineer" />
+            <Field label="Employee Code *" value={form.employeeCode} onChange={setField("employeeCode")} placeholder="e.g. EMP-001" />
+            <Field label="Title / Position *" value={form.title} onChange={setField("title")} placeholder="e.g. Software Engineer" />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs" style={{ color: '#858585' }}>Department *</label>
-            <select value={form.departmentId} onChange={set("departmentId")}
-              className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle} {...focusBlur}>
+            <label className="text-xs" style={{ color: '#858585' }}>Department (optional)</label>
+            <select value={form.departmentId} onChange={setField("departmentId")}
+              className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle}
+              onFocus={handleFocus} onBlur={handleBlur}>
               <option value="">Select department…</option>
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
 
-          <Field label="Start Date *" name="startDate" type="date" />
+          <Field label="Start Date *" value={form.startDate} onChange={setField("startDate")} type="date" />
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Base Salary" name="baseSalary" type="number" placeholder="0" />
+            <Field label="Base Salary" value={form.baseSalary} onChange={setField("baseSalary")} type="number" placeholder="0" />
             <div className="space-y-1">
               <label className="text-xs" style={{ color: '#858585' }}>Currency</label>
-              <select value={form.currency} onChange={set("currency")}
-                className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle} {...focusBlur}>
+              <select value={form.currency} onChange={setField("currency")}
+                className="w-full px-2.5 py-1.5 text-sm rounded-md outline-none" style={inputStyle}
+                onFocus={handleFocus} onBlur={handleBlur}>
                 <option value="PHP">PHP</option>
                 <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
@@ -178,12 +189,12 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
               <h3 className="text-sm font-semibold" style={{ color: '#e0e0e0' }}>Government Contributions</h3>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="SSS Number" name="sssNumber" placeholder="XX-XXXXXXX-X" />
-              <Field label="SSS Contribution / mo" name="sssContribution" type="number" placeholder="0" />
-              <Field label="PhilHealth Number" name="philHealthNumber" placeholder="XXXX-XXXX-XXXX" />
-              <Field label="PhilHealth Contribution / mo" name="philHealthContribution" type="number" placeholder="0" />
-              <Field label="PAG-IBIG Number" name="pagIbigNumber" placeholder="XXXX-XXXX-XXXX" />
-              <Field label="PAG-IBIG Contribution / mo" name="pagIbigContribution" type="number" placeholder="0" />
+              <Field label="SSS Number" value={form.sssNumber} onChange={setField("sssNumber")} placeholder="XX-XXXXXXX-X" />
+              <Field label="SSS Contribution / mo" value={form.sssContribution} onChange={setField("sssContribution")} type="number" placeholder="0" />
+              <Field label="PhilHealth Number" value={form.philHealthNumber} onChange={setField("philHealthNumber")} placeholder="XXXX-XXXX-XXXX" />
+              <Field label="PhilHealth Contribution / mo" value={form.philHealthContribution} onChange={setField("philHealthContribution")} type="number" placeholder="0" />
+              <Field label="PAG-IBIG Number" value={form.pagIbigNumber} onChange={setField("pagIbigNumber")} placeholder="XXXX-XXXX-XXXX" />
+              <Field label="PAG-IBIG Contribution / mo" value={form.pagIbigContribution} onChange={setField("pagIbigContribution")} type="number" placeholder="0" />
             </div>
           </div>
 
@@ -200,50 +211,43 @@ export default function CreateProfileModal({ employee, onClose, onCreated }: Pro
                 className="w-4 h-4 accent-blue-500" />
             </div>
             {form.hasHealthCard && (
-              <Field label="HMO Provider" name="healthCardProvider" placeholder="e.g. Maxicare, Intellicare" />
+              <Field label="HMO Provider" value={form.healthCardProvider} onChange={setField("healthCardProvider")} placeholder="e.g. Maxicare, Intellicare" />
             )}
           </div>
 
           {/* Live Pay Computation */}
-          {(() => {
-            const gross = parseFloat(form.baseSalary) || 0;
-            if (gross <= 0) return null;
-            const deductions = (parseFloat(form.sssContribution) || 0) + (parseFloat(form.philHealthContribution) || 0) + (parseFloat(form.pagIbigContribution) || 0);
-            const net = Math.max(0, gross - deductions);
-            const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            return (
-              <section className="rounded-lg p-4" style={{ backgroundColor: 'rgba(0,122,204,0.1)', border: '1px solid rgba(0,122,204,0.25)' }}>
-                <div className="flex items-center gap-2 mb-3">
-                  <CreditCard className="w-4 h-4 text-blue-400" />
-                  <h3 className="text-sm font-semibold" style={{ color: '#7dbfff' }}>Estimated Net Pay</h3>
+          {gross > 0 && (
+            <section className="rounded-lg p-4" style={{ backgroundColor: 'rgba(0,122,204,0.1)', border: '1px solid rgba(0,122,204,0.25)' }}>
+              <div className="flex items-center gap-2 mb-3">
+                <CreditCard className="w-4 h-4 text-blue-400" />
+                <h3 className="text-sm font-semibold" style={{ color: '#7dbfff' }}>Estimated Net Pay</h3>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs mb-1 font-medium" style={{ color: '#6e6e6e' }}>
+                <span></span>
+                <span className="text-right">Monthly</span>
+                <span className="text-right">Semi-Monthly</span>
+              </div>
+              <div className="space-y-1 text-sm">
+                <div className="grid grid-cols-3 gap-2" style={{ color: '#cccccc' }}>
+                  <span>Gross Salary</span>
+                  <span className="text-right">{form.currency} {fmt(gross)}</span>
+                  <span className="text-right">{form.currency} {fmt(gross / 2)}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-xs mb-1 font-medium" style={{ color: '#6e6e6e' }}>
-                  <span></span>
-                  <span className="text-right">Monthly</span>
-                  <span className="text-right">Semi-Monthly</span>
-                </div>
-                <div className="space-y-1 text-sm">
-                  <div className="grid grid-cols-3 gap-2" style={{ color: '#cccccc' }}>
-                    <span>Gross Salary</span>
-                    <span className="text-right">{form.currency} {fmt(gross)}</span>
-                    <span className="text-right">{form.currency} {fmt(gross / 2)}</span>
+                {deductions > 0 && (
+                  <div className="grid grid-cols-3 gap-2" style={{ color: '#f44747' }}>
+                    <span>Deductions</span>
+                    <span className="text-right">- {form.currency} {fmt(deductions)}</span>
+                    <span className="text-right">- {form.currency} {fmt(deductions / 2)}</span>
                   </div>
-                  {deductions > 0 && (
-                    <div className="grid grid-cols-3 gap-2" style={{ color: '#f44747' }}>
-                      <span>Deductions</span>
-                      <span className="text-right">- {form.currency} {fmt(deductions)}</span>
-                      <span className="text-right">- {form.currency} {fmt(deductions / 2)}</span>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-3 gap-2 font-bold pt-1" style={{ color: '#7dbfff', borderTop: '1px solid rgba(0,122,204,0.2)' }}>
-                    <span>Net Pay</span>
-                    <span className="text-right">{form.currency} {fmt(net)}</span>
-                    <span className="text-right">{form.currency} {fmt(net / 2)}</span>
-                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-2 font-bold pt-1" style={{ color: '#7dbfff', borderTop: '1px solid rgba(0,122,204,0.2)' }}>
+                  <span>Net Pay</span>
+                  <span className="text-right">{form.currency} {fmt(net)}</span>
+                  <span className="text-right">{form.currency} {fmt(net / 2)}</span>
                 </div>
-              </section>
-            );
-          })()}
+              </div>
+            </section>
+          )}
 
           {error && (
             <p className="text-xs rounded-lg px-3 py-2" style={{ color: '#f44747', backgroundColor: 'rgba(244,71,71,0.1)', border: '1px solid rgba(244,71,71,0.25)' }}>{error}</p>
