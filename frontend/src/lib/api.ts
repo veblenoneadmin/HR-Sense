@@ -79,6 +79,10 @@ export const leavesApi = {
   cancel: (id: string) => patch<{ request: LeaveRequestRow }>(`/leaves/${id}/cancel`),
   balance: (employeeId: string, year?: number) =>
     get<{ balances: LeaveBalance[]; year: number }>(`/leaves/balance/${employeeId}${year ? '?year=' + year : ''}`),
+  eversense: (params: { userId?: string; orgId?: string }) => {
+    const qs = new URLSearchParams(params as Record<string, string>).toString()
+    return get<{ leaves: EverSenseLeave[] }>(`/leaves/eversense?${qs}`)
+  },
 }
 
 // ─── Payroll ──────────────────────────────────────────────────────────────────
@@ -242,6 +246,20 @@ export interface CreateEmployeeProfileRequest {
   currency?: string
   startDate: string
   departmentId?: string
+}
+
+export interface EverSenseLeave {
+  id: string
+  userId: string
+  orgId: string
+  type: string
+  status: string
+  startDate: string
+  endDate: string
+  days: number
+  reason?: string
+  approvedAt?: string
+  createdAt: string
 }
 
 export interface DepartmentRow {

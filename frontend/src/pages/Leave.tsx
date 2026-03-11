@@ -3,7 +3,7 @@ import { CalendarOff, CheckCircle2, XCircle, Clock, Plus, X } from "lucide-react
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
-import { leavesApi, employeesApi, getOrgId, LeaveRequestRow, EmployeeRow, CreateLeaveRequest } from "@/lib/api";
+import { leavesApi, employeesApi, getOrgId, LeaveRequestRow, EmployeeRow, CreateLeaveRequest, EverSenseLeave } from "@/lib/api";
 
 const inputCls = "w-full px-2.5 py-1.5 text-sm rounded-md outline-none";
 const inputSx: React.CSSProperties = { border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e', color: '#cccccc' };
@@ -161,13 +161,19 @@ export default function LeavePage() {
   const [filter, setFilter] = useState<FilterType>("ALL");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [esSynced, setEsSynced] = useState<EverSenseLeave[]>([]);
 
   const loadData = () => {
     const orgId = getOrgId();
     setLoading(true);
-    Promise.all([leavesApi.list(), employeesApi.list(orgId)])
-      .then(([leavesRes, empRes]) => {
+    Promise.all([
+      leavesApi.list(),
+      employeesApi.list(orgId),
+      leavesApi.eversense({ orgId }).catch(() => ({ leaves: [] })),
+    ])
+      .then(([leavesRes, empRes, esRes]) => {
         setLeaves(leavesRes.requests);
+        setEsSynced(esRes.leaves);
         const map: Record<string, EmployeeRow> = {};
         empRes.employees.forEach((e) => { map[e.id] = e; });
         setEmpMap(map);
@@ -319,6 +325,35 @@ export default function LeavePage() {
         </div>
 
         <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Synced to EverSense</CardTitle>
+              <CardDescription>{esSynced.length} approved leave{esSynced.length !== 1 ? 's' : ''} reflected</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {esSynced.length === 0 ? (
+                <p className="text-xs" style={{ color: '#6e6e6e' }}>No synced leaves yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {esSynced.slice(0, 6).map((l) => {
+                    const emp = Object.values(empMap).find(e => e.id === l.userId);
+                    const typeStyle = LEAVE_TYPE_COLORS[l.type] ?? { bg: 'rgba(255,255,255,0.08)', color: '#999999' };
+                    return (
+                      <div key={l.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: '#252526', border: '1px solid #3c3c3c' }}>
+                        <div className="w-2 h-2 rounded-full flex-shrink-0 bg-green-400" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate" style={{ color: '#e0e0e0' }}>{emp?.name ?? l.userId}</p>
+                          <p className="text-xs" style={{ color: typeStyle.color }}>{l.type} · {l.days}d</p>
+                          <p className="text-xs" style={{ color: '#6e6e6e' }}>{new Date(l.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} → {new Date(l.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Upcoming Leaves</CardTitle>

@@ -182,6 +182,31 @@ export async function syncLeaveToEverSense(leave) {
   }
 }
 
+// ─── Leave Query ──────────────────────────────────────────────────────────────
+
+export async function getEverSenseLeaves({ userId, orgId } = {}) {
+  const secret = process.env.INTERNAL_API_SECRET
+  if (!secret) {
+    console.warn('[eversense] INTERNAL_API_SECRET not set — skipping leave query')
+    return []
+  }
+  const params = new URLSearchParams()
+  if (userId) params.set('userId', userId)
+  if (orgId)  params.set('orgId', orgId)
+
+  const res = await axios.get(`${BASE_URL}/api/leaves?${params}`, {
+    headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
+    timeout: 10000,
+    validateStatus: () => true,
+  })
+
+  if (res.status !== 200) {
+    console.error(`[eversense] GET /api/leaves → ${res.status}`, JSON.stringify(res.data).slice(0, 200))
+    return []
+  }
+  return res.data?.leaves ?? []
+}
+
 // ─── Employees / Users ────────────────────────────────────────────────────────
 
 export async function getOrgMembers(orgId, userToken) {

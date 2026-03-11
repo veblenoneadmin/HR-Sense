@@ -3,9 +3,20 @@
  */
 import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
-import { syncLeaveToEverSense } from '../lib/eversense.js'
+import { syncLeaveToEverSense, getEverSenseLeaves } from '../lib/eversense.js'
 
 const router = Router()
+
+// GET /api/leaves/eversense?userId=xxx — proxy query to EverSense synced leaves
+router.get('/eversense', async (req, res) => {
+  try {
+    const { userId, orgId } = req.query
+    const leaves = await getEverSenseLeaves({ userId, orgId })
+    res.json({ leaves })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // GET /api/leaves?orgId=xxx&status=PENDING
 router.get('/', async (req, res) => {
