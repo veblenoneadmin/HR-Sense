@@ -162,6 +162,7 @@ export default function LeavePage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [esSynced, setEsSynced] = useState<EverSenseLeave[]>([]);
+  const [esSyncError, setEsSyncError] = useState("");
 
   const loadData = () => {
     const orgId = getOrgId();
@@ -169,7 +170,7 @@ export default function LeavePage() {
     Promise.all([
       leavesApi.list(),
       employeesApi.list(orgId),
-      leavesApi.eversense({ orgId }).catch(() => ({ leaves: [] })),
+      leavesApi.eversense({ orgId }).catch((err: any) => { setEsSyncError(err.message ?? 'EverSense sync unavailable'); return { leaves: [] }; }),
     ])
       .then(([leavesRes, empRes, esRes]) => {
         setLeaves(leavesRes.requests);
@@ -331,9 +332,12 @@ export default function LeavePage() {
               <CardDescription>{esSynced.length} approved leave{esSynced.length !== 1 ? 's' : ''} reflected</CardDescription>
             </CardHeader>
             <CardContent>
-              {esSynced.length === 0 ? (
+              {esSyncError ? (
+                <p className="text-xs rounded px-2 py-1.5" style={{ color: '#f44747', backgroundColor: 'rgba(244,71,71,0.1)', border: '1px solid rgba(244,71,71,0.2)' }}>{esSyncError}</p>
+              ) : esSynced.length === 0 ? (
                 <p className="text-xs" style={{ color: '#6e6e6e' }}>No synced leaves yet.</p>
               ) : (
+
                 <div className="space-y-2">
                   {esSynced.slice(0, 6).map((l) => {
                     const emp = Object.values(empMap).find(e => e.id === l.userId);
