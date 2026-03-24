@@ -3,7 +3,7 @@
  * Computes KPI metrics from EverSense time logs + tasks + reports.
  */
 import { Router } from 'express'
-import { getOrgMembers, buildKpiForUser } from '../lib/eversense.js'
+import { getOrgMembers, buildKpiForAllUsers, buildKpiForUser } from '../lib/eversense.js'
 
 const router = Router()
 
@@ -19,16 +19,8 @@ router.get('/', async (req, res) => {
       .map(m => m.user ?? m)
       .filter(u => u.isActive !== false)
 
-    const metrics = await Promise.all(
-      users.map(async user => {
-        try {
-          const kpi = await buildKpiForUser(user.id, period, userToken, orgId)
-          return { ...kpi, userName: user.name, userImage: user.image }
-        } catch {
-          return { userId: user.id, userName: user.name, period, hoursLogged: 0, tasksCompleted: 0, reportsSubmitted: 0, performanceScore: 0, tier: 'UNDERPERFORMING' }
-        }
-      })
-    )
+    // Fetch all org data in 3 API calls instead of 3× per user
+    const metrics = await buildKpiForAllUsers(users, period, userToken, orgId)
 
     const sorted = metrics.sort((a, b) => b.performanceScore - a.performanceScore)
 

@@ -270,6 +270,47 @@ export async function getAttendanceLogs(orgId, params = {}, userToken) {
 
 // ─── KPI aggregation ─────────────────────────────────────────────────────────
 
+// Bulk: fetch all org data once, compute KPIs for every user locally (3 API calls total)
+export async function buildKpiForAllUsers(users, period, userToken, orgId) {
+  const [startDate, endDate] = getPeriodBounds(period)
+  const [timerData, taskData, reportData] = await Promise.all([
+    esGet(`/api/timers/recent`, { orgId, startDate, endDate }, userToken),
+    esGet(`/api/tasks/org/${orgId}`, { startDate, endDate }, userToken),
+    esGet(`/api/user-reports`, { orgId, startDate, endDate }, userToken),
+  ])
+
+  const allLogs    = timerData?.data   ?? timerData?.logs   ?? timerData   ?? []
+  const allTasks   = taskData?.data    ?? taskData?.tasks   ?? taskData    ?? []
+  const allReports = reportData?.data  ?? reportData?.reports ?? reportData ?? []
+
+  const AVG_HOURS = 48.19
+  const AVG_TASKS = 3.5
+
+  return users.map(user => {
+    const uid = user.id
+    const logs    = Array.isArray(allLogs)    ? allLogs.filter(t => t.userId === uid || t.memberId === uid) : []
+    const tasks   = Array.isArray(allTasks)   ? allTasks.filter(t => (t.assignees ?? []).some(a => (a.userId ?? a.id) === uid) || t.assignedUserId === uid) : []
+    const reports = Array.isArray(allReports) ? allReports.filter(r => r.userId === uid) : []
+
+    const hoursLogged = logs.reduce((sum, t) => sum + (t.duration ?? t.durationSeconds ?? 0), 0) / 3600
+    const completedTasks = tasks.filter(t => ['DONE', 'completed', 'done'].includes(t.status)).length
+    const reportsCount = reports.length
+
+    const hoursScore = hoursLogged / AVG_HOURS
+    const taskScore  = completedTasks / AVG_TASKS
+    const performanceScore = (hoursScore + taskScore + (reportsCount > 0 ? 0.1 : 0)) / 2
+
+    const tier =
+      hoursLogged > AVG_HOURS * 1.6 ? 'BURNOUT_RISK'
+      : performanceScore >= 1.5 ? 'STAR'
+      : performanceScore >= 1.0 ? 'GOOD'
+      : performanceScore >= 0.5 ? 'AVERAGE'
+      : 'UNDERPERFORMING'
+
+    return { userId: uid, userName: user.name, userImage: user.image, period, hoursLogged, tasksCompleted: completedTasks, reportsSubmitted: reportsCount, performanceScore, tier }
+  })
+}
+
 export async function buildKpiForUser(userId, period, userToken, orgId = null) {
   const [startDate, endDate] = getPeriodBounds(period)
   const [timerLogs, tasks, reports] = await Promise.all([
