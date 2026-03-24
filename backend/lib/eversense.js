@@ -1,211 +1,347 @@
 /**
- * EverSense data layer — direct DB queries via shared MySQL database.
- * Both HR-Sense and EverSense share the same MySQL instance, so we query
- * EverSense tables directly instead of calling the HTTP API.
+ * EverSense API client
+ * Uses a service account (EVERSENSE_SERVICE_EMAIL / PASSWORD) to authenticate
+ * server-to-server. Session is cached and auto-refreshed.
  */
-import { prisma } from './prisma.js'
+import axios from 'axios'
 
-// ─── Org Members ─────────────────────────────────────────────────────────────
+const BASE_URL = process.env.EVERSENSE_API_URL || 'https://eversense-ai.up.railway.app'
 
-export async function getOrgMembers(orgId) {
-  const memberships = await prisma.esMembership.findMany({ where: { orgId } })
-  const userIds = memberships.map(m => m.userId)
-  const users = await prisma.esUser.findMany({ where: { id: { in: userIds } } })
-  const userMap = Object.fromEntries(users.map(u => [u.id, u]))
+// ─── Service-account session cache ────────────────────────────────────────────
 
-  return {
-    members: memberships.map(m => ({
-      userId: m.userId,
-      role: m.role,
-      user: userMap[m.userId] ?? { id: m.userId, name: 'Unknown', email: '' },
-    })),
+let _cachedToken = null
+let _cachedCookie = null  // full "CookieName=Value" string to forward as-is
+let _tokenExpiry = 0
+
+async function getServiceSession() {
+  if (_cachedToken && Date.now() < _tokenExpiry) return { token: _cachedToken, cookie: _cachedCookie }
+
+  const email = process.env.EVERSENSE_SERVICE_EMAIL
+  const password = process.env.EVERSENSE_SERVICE_PASSWORD
+
+  if (!email || !password) {
+    console.warn('[eversense] EVERSENSE_SERVICE_EMAIL / PASSWORD not set — unauthenticated requests will likely fail')
+    return { token: null, cookie: null }
   }
+
+  console.log('[eversense] signing in service account:', email)
+  const res = await axios.post(
+    `${BASE_URL}/api/auth/sign-in/email`,
+    { email, password },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 10000, validateStatus: () => true }
+  )
+
+  if (res.status >= 400) {
+    console.error('[eversense] service account login failed:', res.status, res.data)
+    return { token: null, cookie: null }
+  }
+
+  // EverSense on Railway uses __Secure-better-auth.session_token (HTTPS prefix)
+  // cookiePart = full "CookieName=Value" before the semicolon
+  const setCookieHeader = res.headers['set-cookie']
+  const allCookies = Array.isArray(setCookieHeader) ? setCookieHeader : (setCookieHeader ? [setCookieHeader] : [])
+  const authCookie = allCookies.find(c => c.includes('better-auth.session_token='))
+  const cookiePart = authCookie ? authCookie.split(';')[0].trim() : null
+  // token = value only (everything after the first "=")
+  const token = cookiePart
+    ? cookiePart.split('=').slice(1).join('=')
+    : (res.data?.session?.token || res.data?.token || null)
+
+  if (!token) {
+    console.error('[eversense] service account login: no token in response')
+    return { token: null, cookie: null }
+  }
+
+  _cachedToken = token
+  _cachedCookie = cookiePart  // e.g. "__Secure-better-auth.session_token=VALUE"
+  _tokenExpiry = Date.now() + 22 * 60 * 60 * 1000
+  console.log('[eversense] service account session acquired, cookie:', cookiePart?.slice(0, 40) + '...')
+  return { token, cookie: cookiePart }
 }
 
-export async function getUser(userId) {
-  return prisma.esUser.findUnique({ where: { id: userId } })
+// ─── HTTP helper ──────────────────────────────────────────────────────────────
+
+function buildHeaders(token, cookie) {
+  const h = { 'Content-Type': 'application/json' }
+  if (token) h['Authorization'] = `Bearer ${token}`
+  if (cookie) h['Cookie'] = cookie
+  return h
 }
 
-// ─── Time Logs ────────────────────────────────────────────────────────────────
+// userToken: the logged-in user's EverSense token (forwarded from Authorization header).
+// If provided, use it directly. If not (or if it 401s), fall back to service account.
+async function esGet(path, params, userToken = null) {
+  // Prefer the user's own token — it has access to their org
+  let token = userToken
+  let cookie = userToken ? `__Secure-better-auth.session_token=${userToken}` : null
 
-export async function getTimeLogs(orgId, params = {}) {
-  const { startDate, endDate, userId } = params
-  const where = { orgId }
-  if (userId) where.userId = userId
-  if (startDate || endDate) {
-    where.begin = {}
-    if (startDate) where.begin.gte = new Date(startDate)
-    if (endDate) where.begin.lte = new Date(endDate)
+  if (!token) {
+    const svc = await getServiceSession()
+    token = svc.token
+    cookie = svc.cookie
   }
-  const logs = await prisma.esTimeLog.findMany({ where, orderBy: { begin: 'desc' } })
-  return { data: logs }
+
+  const res = await axios.get(`${BASE_URL}${path}`, {
+    params,
+    headers: buildHeaders(token, cookie),
+    timeout: 10000,
+    validateStatus: () => true,
+  })
+
+  // On 401, try the service account as a fallback (user token may have expired)
+  if (res.status === 401) {
+    console.warn('[eversense] 401 on', path, '— trying service account fallback')
+    _cachedToken = null
+    _cachedCookie = null
+    _tokenExpiry = 0
+    const fresh = await getServiceSession()
+    if (!fresh.token) return null
+    const retry = await axios.get(`${BASE_URL}${path}`, {
+      params,
+      headers: buildHeaders(fresh.token, fresh.cookie),
+      timeout: 10000,
+      validateStatus: () => true,
+    })
+    if (retry.status >= 400) {
+      console.error(`[eversense] ${path} → ${retry.status}`, JSON.stringify(retry.data).slice(0, 200))
+    }
+    return retry.data
+  }
+
+  if (res.status >= 400) {
+    console.error(`[eversense] ${path} → ${res.status}`, JSON.stringify(res.data).slice(0, 200))
+  }
+  return res.data
 }
 
-export async function getUserTimeLogs(userId, params = {}) {
-  const { startDate, endDate } = params
-  const where = { userId }
-  if (startDate || endDate) {
-    where.begin = {}
-    if (startDate) where.begin.gte = new Date(startDate)
-    if (endDate) where.begin.lte = new Date(endDate)
+async function esPost(path, body) {
+  const svc = await getServiceSession()
+  let { token, cookie } = svc
+
+  const res = await axios.post(`${BASE_URL}${path}`, body, {
+    headers: buildHeaders(token, cookie),
+    timeout: 10000,
+    validateStatus: () => true,
+  })
+
+  // On 401, refresh service session and retry once
+  if (res.status === 401) {
+    console.warn('[eversense] 401 on POST', path, '— trying service account fallback')
+    _cachedToken = null
+    _cachedCookie = null
+    _tokenExpiry = 0
+    const fresh = await getServiceSession()
+    if (!fresh.token) return null
+    const retry = await axios.post(`${BASE_URL}${path}`, body, {
+      headers: buildHeaders(fresh.token, fresh.cookie),
+      timeout: 10000,
+      validateStatus: () => true,
+    })
+    if (retry.status >= 400) {
+      console.error(`[eversense] POST ${path} → ${retry.status}`, JSON.stringify(retry.data).slice(0, 200))
+    }
+    return retry.data
   }
-  const logs = await prisma.esTimeLog.findMany({ where, orderBy: { begin: 'desc' } })
-  return logs
+
+  if (res.status >= 400) {
+    console.error(`[eversense] POST ${path} → ${res.status}`, JSON.stringify(res.data).slice(0, 200))
+  }
+  return res.data
 }
 
-export async function getTeamTimerStats(orgId, params = {}) {
-  const { startDate, endDate } = params
-  const where = { orgId }
-  if (startDate || endDate) {
-    where.begin = {}
-    if (startDate) where.begin.gte = new Date(startDate)
-    if (endDate) where.begin.lte = new Date(endDate)
-  }
-  const logs = await prisma.esTimeLog.findMany({ where })
-  const grouped = {}
-  for (const log of logs) {
-    if (!grouped[log.userId]) grouped[log.userId] = { userId: log.userId, totalDuration: 0 }
-    grouped[log.userId].totalDuration += log.duration
-  }
-  return Object.values(grouped)
-}
+// ─── Leave Sync ───────────────────────────────────────────────────────────────
 
-// ─── Tasks ───────────────────────────────────────────────────────────────────
-
-export async function getTasks(orgId, params = {}) {
-  const { startDate, endDate } = params
-  const where = { orgId }
-  if (startDate || endDate) {
-    where.createdAt = {}
-    if (startDate) where.createdAt.gte = new Date(startDate)
-    if (endDate) where.createdAt.lte = new Date(endDate)
+export async function syncLeaveToEverSense(leave) {
+  const secret = process.env.INTERNAL_API_SECRET
+  if (!secret) {
+    console.warn('[eversense] INTERNAL_API_SECRET not set — skipping leave sync')
+    return
   }
-  const tasks = await prisma.esMacroTask.findMany({ where, orderBy: { createdAt: 'desc' } })
-  return { tasks }
-}
 
-export async function getUserTasks(userId, params = {}) {
-  const { startDate, endDate, orgId } = params
-  const where = { userId }
-  if (orgId) where.orgId = orgId
-  if (startDate || endDate) {
-    where.createdAt = {}
-    if (startDate) where.createdAt.gte = new Date(startDate)
-    if (endDate) where.createdAt.lte = new Date(endDate)
-  }
-  const tasks = await prisma.esMacroTask.findMany({ where, orderBy: { createdAt: 'desc' } })
-  return tasks
-}
+  const { esUserId, type, status, startDate, endDate, days, reason, approvedAt } = leave
 
-// ─── Attendance ───────────────────────────────────────────────────────────────
+  // Temporarily inject the secret header via axios interceptor-free approach:
+  // esPost uses service session auth — also pass the internal secret so EverSense accepts it
+  const res = await axios.post(
+    `${BASE_URL}/api/leaves`,
+    { userId: esUserId, type, status: status || 'APPROVED', startDate, endDate, days, reason, approvedAt },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': secret,
+      },
+      timeout: 10000,
+      validateStatus: () => true,
+    }
+  )
 
-export async function getAttendanceLogs(orgId, params = {}) {
-  const { startDate, endDate, userId } = params
-  const where = { orgId }
-  if (userId) where.userId = userId
-  if (startDate || endDate) {
-    where.timeIn = {}
-    if (startDate) where.timeIn.gte = new Date(startDate)
-    if (endDate) where.timeIn.lte = new Date(endDate)
-  }
-  const logs = await prisma.esAttendanceLog.findMany({ where, orderBy: { timeIn: 'desc' } })
-  return {
-    data: logs.map(log => ({
-      id: log.id,
-      userId: log.userId,
-      memberId: log.userId,
-      timeIn: log.timeIn,
-      timeOut: log.timeOut,
-      duration: log.duration,
-      durationMins: Math.floor(log.duration / 60),
-      isActive: log.timeOut == null,
-      date: log.date,
-    })),
+  if (res.status === 201) {
+    console.log(`[eversense] ✅ Leave synced for esUserId=${esUserId} type=${type} days=${days}`)
+  } else {
+    console.error(`[eversense] ❌ Leave sync failed: ${res.status}`, JSON.stringify(res.data).slice(0, 200))
   }
 }
-
-// ─── Leave Sync ──────────────────────────────────────────────────────────────
-// Leave data is written directly to the shared `leaves` table in the approve
-// handler (leaves.js). This function is kept for import compatibility.
-export async function syncLeaveToEverSense(_leave) {}
 
 // ─── Leave Query ──────────────────────────────────────────────────────────────
 
 export async function getEverSenseLeaves({ userId, orgId } = {}) {
-  const where = {}
-  if (userId) where.userId = userId
-  if (orgId) where.orgId = orgId
-  return prisma.leave.findMany({ where, orderBy: { startDate: 'desc' }, take: 100 })
+  const secret = process.env.INTERNAL_API_SECRET
+  if (!secret) {
+    console.warn('[eversense] INTERNAL_API_SECRET not set — skipping leave query')
+    return []
+  }
+  const params = new URLSearchParams()
+  if (userId) params.set('userId', userId)
+  if (orgId)  params.set('orgId', orgId)
+
+  const res = await axios.get(`${BASE_URL}/api/leaves?${params}`, {
+    headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
+    timeout: 10000,
+    validateStatus: () => true,
+  })
+
+  if (res.status !== 200) {
+    console.error(`[eversense] GET /api/leaves → ${res.status}`, JSON.stringify(res.data).slice(0, 200))
+    return []
+  }
+  return res.data?.leaves ?? []
+}
+
+// ─── Employees / Users ────────────────────────────────────────────────────────
+
+export async function getOrgMembers(orgId, userToken) {
+  // Try the members endpoint first; fall back to allMembers from attendance/logs
+  const data = await esGet(`/api/organizations/${orgId}/members`, null, userToken)
+  if (data && !data.error) return data
+
+  console.warn('[eversense] members endpoint failed, falling back to attendance/logs allMembers')
+  const attendance = await esGet(`/api/attendance/logs`, { orgId }, userToken)
+  const allMembers = attendance?.allMembers ?? []
+  // Normalize to the same shape the rest of the code expects: { members: [{ user: {...} }] }
+  return { members: allMembers.map(m => ({ userId: m.id, role: m.role, user: m })) }
+}
+
+export async function getUser(userId, userToken) {
+  return esGet(`/api/users/${userId}`, null, userToken)
+}
+
+// ─── Time Logs ────────────────────────────────────────────────────────────────
+// EverSense endpoints: /api/timers/recent (all entries), /api/timers/team (grouped by member)
+
+export async function getTimeLogs(orgId, params = {}, userToken) {
+  return esGet(`/api/timers/recent`, { orgId, ...params }, userToken)
+}
+
+export async function getUserTimeLogs(userId, params = {}, userToken) {
+  return esGet(`/api/timers/recent`, { userId, ...params }, userToken)
+}
+
+export async function getTeamTimerStats(orgId, params = {}, userToken) {
+  return esGet(`/api/timers/team`, { orgId, ...params }, userToken)
+}
+
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+
+export async function getTasks(orgId, params = {}, userToken) {
+  return esGet(`/api/tasks/org/${orgId}`, params, userToken)
+}
+
+export async function getUserTasks(userId, params = {}, userToken) {
+  return esGet(`/api/tasks`, { assignedUserId: userId, ...params }, userToken)
+}
+
+// ─── Projects ─────────────────────────────────────────────────────────────────
+
+export async function getProjects(orgId, userToken) {
+  return esGet(`/api/projects`, { orgId }, userToken)
+}
+
+// ─── Reports / KPIs ───────────────────────────────────────────────────────────
+
+export async function getReports(orgId, params = {}, userToken) {
+  return esGet(`/api/user-reports`, { orgId, ...params }, userToken)
+}
+
+// ─── Attendance ───────────────────────────────────────────────────────────────
+
+export async function getAttendanceLogs(orgId, params = {}, userToken) {
+  return esGet(`/api/attendance/logs`, { orgId, ...params }, userToken)
 }
 
 // ─── KPI aggregation ─────────────────────────────────────────────────────────
 
-export async function buildKpiForAllUsers(users, period, _userToken = null, orgId = null) {
+// Bulk: fetch all org data once, compute KPIs for every user locally (3 API calls total)
+export async function buildKpiForAllUsers(users, period, userToken, orgId) {
   const [startDate, endDate] = getPeriodBounds(period)
-  const userIds = users.map(u => u.id)
-
-  const [timeLogs, tasks] = await Promise.all([
-    prisma.esTimeLog.findMany({
-      where: {
-        userId: { in: userIds },
-        begin: { gte: new Date(startDate), lte: new Date(endDate) },
-        ...(orgId ? { orgId } : {}),
-      },
-    }),
-    prisma.esMacroTask.findMany({
-      where: {
-        userId: { in: userIds },
-        createdAt: { gte: new Date(startDate), lte: new Date(endDate) },
-        ...(orgId ? { orgId } : {}),
-      },
-    }),
+  const [timerData, taskData, reportData] = await Promise.all([
+    esGet(`/api/timers/recent`, { orgId, startDate, endDate }, userToken),
+    esGet(`/api/tasks/org/${orgId}`, { startDate, endDate }, userToken),
+    esGet(`/api/user-reports`, { orgId, startDate, endDate }, userToken),
   ])
+
+  const allLogs    = timerData?.data   ?? timerData?.logs   ?? timerData   ?? []
+  const allTasks   = taskData?.data    ?? taskData?.tasks   ?? taskData    ?? []
+  const allReports = reportData?.data  ?? reportData?.reports ?? reportData ?? []
 
   const AVG_HOURS = 48.19
   const AVG_TASKS = 3.5
 
   return users.map(user => {
-    const userLogs = timeLogs.filter(t => t.userId === user.id)
-    const userTasks = tasks.filter(t => t.userId === user.id)
-    const hoursLogged = userLogs.reduce((sum, t) => sum + (t.duration ?? 0), 0) / 3600
-    const completedTasks = userTasks.filter(t => ['done', 'completed', 'DONE'].includes(t.status)).length
-    const performanceScore = (hoursLogged / AVG_HOURS + completedTasks / AVG_TASKS) / 2
+    const uid = user.id
+    const logs    = Array.isArray(allLogs)    ? allLogs.filter(t => t.userId === uid || t.memberId === uid) : []
+    const tasks   = Array.isArray(allTasks)   ? allTasks.filter(t => (t.assignees ?? []).some(a => (a.userId ?? a.id) === uid) || t.assignedUserId === uid) : []
+    const reports = Array.isArray(allReports) ? allReports.filter(r => r.userId === uid) : []
+
+    const hoursLogged = logs.reduce((sum, t) => sum + (t.duration ?? t.durationSeconds ?? 0), 0) / 3600
+    const completedTasks = tasks.filter(t => ['DONE', 'completed', 'done'].includes(t.status)).length
+    const reportsCount = reports.length
+
+    const hoursScore = hoursLogged / AVG_HOURS
+    const taskScore  = completedTasks / AVG_TASKS
+    const performanceScore = (hoursScore + taskScore + (reportsCount > 0 ? 0.1 : 0)) / 2
+
     const tier =
       hoursLogged > AVG_HOURS * 1.6 ? 'BURNOUT_RISK'
       : performanceScore >= 1.5 ? 'STAR'
       : performanceScore >= 1.0 ? 'GOOD'
       : performanceScore >= 0.5 ? 'AVERAGE'
       : 'UNDERPERFORMING'
-    return { userId: user.id, userName: user.name, userImage: user.image, period, hoursLogged, tasksCompleted: completedTasks, reportsSubmitted: 0, performanceScore, tier }
+
+    return { userId: uid, userName: user.name, userImage: user.image, period, hoursLogged, tasksCompleted: completedTasks, reportsSubmitted: reportsCount, performanceScore, tier }
   })
 }
 
-export async function buildKpiForUser(userId, period, _userToken = null, orgId = null) {
+export async function buildKpiForUser(userId, period, userToken, orgId = null) {
   const [startDate, endDate] = getPeriodBounds(period)
-
-  const [timeLogs, tasks] = await Promise.all([
-    prisma.esTimeLog.findMany({
-      where: {
-        userId,
-        begin: { gte: new Date(startDate), lte: new Date(endDate) },
-        ...(orgId ? { orgId } : {}),
-      },
-    }),
-    prisma.esMacroTask.findMany({
-      where: {
-        userId,
-        createdAt: { gte: new Date(startDate), lte: new Date(endDate) },
-        ...(orgId ? { orgId } : {}),
-      },
-    }),
+  const [timerLogs, tasks, reports] = await Promise.all([
+    getUserTimeLogs(userId, { startDate, endDate }, userToken),
+    getUserTasks(userId, { startDate, endDate }, userToken),
+    getReports(orgId, { userId, startDate, endDate }, userToken),
   ])
 
-  const hoursLogged = timeLogs.reduce((sum, t) => sum + (t.duration ?? 0), 0) / 3600
-  const completedTasks = tasks.filter(t => ['done', 'completed', 'DONE'].includes(t.status)).length
+  // Use task-based timer logs for hours — if no timers exist for the period, hours = 0
+  const logs = timerLogs?.data ?? timerLogs?.logs ?? timerLogs ?? []
+  const hoursLogged = Array.isArray(logs) && logs.length > 0
+    ? logs.reduce((sum, t) => {
+        // EverSense timer: duration in seconds
+        const secs = t.duration ?? t.durationSeconds ?? 0
+        return sum + secs
+      }, 0) / 3600
+    : 0
+
+  const taskList = tasks?.data ?? tasks?.tasks ?? tasks ?? []
+  const completedTasks = Array.isArray(taskList)
+    ? taskList.filter(t => t.status === 'DONE' || t.status === 'completed' || t.status === 'done').length
+    : 0
+
+  const reportList = reports?.data ?? reports?.reports ?? reports ?? []
+  const reportsCount = Array.isArray(reportList) ? reportList.length : 0
 
   const AVG_HOURS = 48.19
   const AVG_TASKS = 3.5
-  const performanceScore = (hoursLogged / AVG_HOURS + completedTasks / AVG_TASKS) / 2
+  const hoursScore = hoursLogged / AVG_HOURS
+  const taskScore = completedTasks / AVG_TASKS
+  const performanceScore = (hoursScore + taskScore + (reportsCount > 0 ? 0.1 : 0)) / 2
 
   const tier =
     hoursLogged > AVG_HOURS * 1.6 ? 'BURNOUT_RISK'
@@ -214,7 +350,7 @@ export async function buildKpiForUser(userId, period, _userToken = null, orgId =
     : performanceScore >= 0.5 ? 'AVERAGE'
     : 'UNDERPERFORMING'
 
-  return { userId, period, hoursLogged, tasksCompleted: completedTasks, reportsSubmitted: 0, performanceScore, tier }
+  return { userId, period, hoursLogged, tasksCompleted: completedTasks, reportsSubmitted: reportsCount, performanceScore, tier }
 }
 
 function getPeriodBounds(period) {
