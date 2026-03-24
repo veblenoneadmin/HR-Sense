@@ -62,18 +62,11 @@ router.post('/login', async (req, res) => {
           ...(cookieString ? { Cookie: cookieString } : {}),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        timeout: 12000,
+        timeout: 5000,
         validateStatus: () => true,
       })
       console.log('[auth] /api/organizations status:', orgRes.status)
       console.log('[auth] /api/organizations data:', JSON.stringify(orgRes.data).slice(0, 500))
-
-      if (orgRes.status >= 500) {
-        return res.status(503).json({ error: 'EverSense service is temporarily unavailable. Please try again.' })
-      }
-      if (orgRes.status === 401 || orgRes.status === 403) {
-        return res.status(401).json({ error: 'Session rejected by EverSense. Please try again.' })
-      }
 
       // Handle both { organizations: [...] } and direct array responses
       const rawOrgs = orgRes.data?.organizations ?? orgRes.data?.data ?? (Array.isArray(orgRes.data) ? orgRes.data : [])
@@ -84,11 +77,8 @@ router.post('/login', async (req, res) => {
       const role = rawRole.toUpperCase()
       console.log('[auth] org count:', orgs.length, '| raw role:', rawRole, '| role:', role)
 
-      if (orgs.length === 0) {
-        return res.status(403).json({ error: 'No organization found. Please create an organization in EverSense first.' })
-      }
       if (!['OWNER', 'ADMIN'].includes(role)) {
-        return res.status(403).json({ error: `Access denied. Your role (${role || 'unknown'}) cannot access HR-Sense. Only Owner or Admin can.` })
+        return res.status(403).json({ error: 'Access denied. Only Owner or Admin can access HR-Sense.' })
       }
       user.role = role
       user.orgId = firstOrg.id ?? firstOrg.organizationId ?? ''
