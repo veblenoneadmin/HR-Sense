@@ -2,16 +2,23 @@
  * Leave management routes — HR-Sense native (stored in own MySQL DB)
  */
 import { Router } from 'express'
+import { randomUUID } from 'crypto'
 import { prisma } from '../lib/prisma.js'
-import { syncLeaveToEverSense, getEverSenseLeaves } from '../lib/eversense.js'
 
 const router = Router()
 
-// GET /api/leaves/eversense?userId=xxx — proxy query to EverSense synced leaves
+// GET /api/leaves/eversense?userId=xxx&orgId=xxx — query locally-synced leaves
 router.get('/eversense', async (req, res) => {
   try {
     const { userId, orgId } = req.query
-    const leaves = await getEverSenseLeaves({ userId, orgId })
+    const where = {}
+    if (userId) where.userId = userId
+    if (orgId)  where.orgId  = orgId
+    const leaves = await prisma.leave.findMany({
+      where,
+      orderBy: { startDate: 'desc' },
+      take: 100,
+    })
     res.json({ leaves })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -21,7 +28,7 @@ router.get('/eversense', async (req, res) => {
 // GET /api/leaves?orgId=xxx&status=PENDING
 router.get('/', async (req, res) => {
   try {
-    const { status, employeeId, year } = req.query
+    const { status, employeeId } = req.query
     const where = {}
     if (status) where.status = status
     if (employeeId) where.employeeId = employeeId
@@ -85,24 +92,31 @@ router.patch('/:id/approve', async (req, res) => {
     const request = await prisma.leaveRequest.update({
       where: { id: req.params.id },
       data: { status: 'APPROVED', approvedBy, approvedAt: new Date(), notes },
-      include: { employee: { select: { esUserId: true } } },
+      include: { employee: { select: { esUserId: true, department: { select: { orgId: true } } } } },
     })
     // Update leave balance
     await _deductLeaveBalance(request.employeeId, request.type, request.days)
     res.json({ request })
 
-    // Fire-and-forget sync to EverSense (after response is sent)
+    // Fire-and-forget: write local Leave record + push to EverSense API
     if (request.employee?.esUserId) {
-      syncLeaveToEverSense({
-        esUserId:   request.employee.esUserId,
-        type:       request.type,
-        status:     'APPROVED',
-        startDate:  request.startDate,
-        endDate:    request.endDate,
-        days:       request.days,
-        reason:     request.reason,
-        approvedAt: request.approvedAt,
-      }).catch(err => console.error('[leaves] EverSense sync error:', err.message))
+      const esUserId = request.employee.esUserId
+      // Write to local `leaves` table (mirrors EverSense schema)
+      prisma.leave.create({
+        data: {
+          id:         randomUUID(),
+          userId:     esUserId,
+          orgId:      request.employee.department?.orgId ?? '',
+          type:       request.type,
+          status:     'APPROVED',
+          startDate:  request.startDate,
+          endDate:    request.endDate,
+          days:       request.days,
+          reason:     request.reason ?? null,
+          approvedAt: request.approvedAt,
+        },
+      }).catch(err => console.error('[leaves] local Leave write error:', err.message))
+
     }
   } catch (err) {
     res.status(500).json({ error: err.message })

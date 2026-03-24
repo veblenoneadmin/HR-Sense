@@ -174,6 +174,103 @@ model PayrollRecord {
   @@map("payroll_records")
 }
 
+// ─── EverSense Synced Leaves (local copy written on approve) ─────────────────
+// Mirrors the `leaves` table from EverSense so HR-Sense can query it without
+// an external API call.  Written by the approve handler; read by the Leave page.
+
+model Leave {
+  id         String    @id @db.VarChar(191)
+  userId     String    @db.VarChar(36)   // EverSense user ID
+  orgId      String    @db.VarChar(191)  // EverSense org ID
+  type       String    @db.VarChar(50)
+  status     String    @default("APPROVED") @db.VarChar(20)
+  startDate  DateTime
+  endDate    DateTime
+  days       Int
+  reason     String?   @db.Text
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([orgId])
+  @@index([userId, startDate])
+  @@map("leaves")
+}
+
+// ─── EverSense Read-Only Models (shared database) ────────────────────────────
+// These tables are owned/managed by EverSense. HR-Sense only reads them.
+// Never run `prisma db push` for these — use `prisma generate` only.
+
+model EsUser {
+  id        String  @id @db.VarChar(36)
+  email     String  @unique @db.VarChar(255)
+  name      String? @db.VarChar(255)
+  image     String? @db.VarChar(255)
+  createdAt DateTime? @default(now()) @db.Timestamp(0)
+
+  @@map("User")
+}
+
+model EsMembership {
+  id     String @id
+  userId String
+  orgId  String
+  role   String
+
+  @@index([orgId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model EsAttendanceLog {
+  id            String    @id @db.VarChar(50)
+  userId        String    @db.VarChar(36)
+  orgId         String    @db.VarChar(191)
+  timeIn        DateTime
+  timeOut       DateTime?
+  duration      Int       @default(0)
+  breakDuration Int       @default(0)
+  date          String    @db.VarChar(10)
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([orgId])
+  @@map("attendance_logs")
+}
+
+model EsMacroTask {
+  id             String    @id @db.VarChar(50)
+  title          String    @db.VarChar(500)
+  userId         String    @db.VarChar(36)
+  orgId          String
+  status         String    @default("not_started") @db.VarChar(20)
+  priority       String    @default("Medium") @db.VarChar(10)
+  actualHours    Decimal   @default(0.00) @db.Decimal(5, 2)
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  @@index([userId, status])
+  @@index([orgId])
+  @@map("macro_tasks")
+}
+
+model EsTimeLog {
+  id        String    @id @db.VarChar(50)
+  taskId    String?   @db.VarChar(50)
+  userId    String    @db.VarChar(36)
+  orgId     String
+  begin     DateTime
+  end       DateTime?
+  duration  Int       @default(0)
+  category  String    @default("work") @db.VarChar(20)
+  createdAt DateTime  @default(now())
+
+  @@index([userId, begin])
+  @@index([orgId])
+  @@map("time_logs")
+}
+
 // ─── HR Settings ─────────────────────────────────────────────────────────────
 
 model HrSettings {
