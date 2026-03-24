@@ -185,6 +185,7 @@ model EsUser {
   image     String?   @db.VarChar(255)
   createdAt DateTime? @default(now()) @db.Timestamp(0)
 
+  @@ignore
   @@map("User")
 }
 
@@ -194,6 +195,7 @@ model EsMembership {
   orgId  String
   role   String
 
+  @@ignore
   @@index([orgId])
   @@index([userId])
   @@map("memberships")
@@ -210,6 +212,7 @@ model EsAttendanceLog {
   date          String    @db.VarChar(10)
   createdAt     DateTime  @default(now())
 
+  @@ignore
   @@index([userId])
   @@index([orgId])
   @@map("attendance_logs")
@@ -227,6 +230,7 @@ model EsMacroTask {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
 
+  @@ignore
   @@index([userId, status])
   @@index([orgId])
   @@map("macro_tasks")
@@ -243,6 +247,7 @@ model EsTimeLog {
   category  String    @default("work") @db.VarChar(20)
   createdAt DateTime  @default(now())
 
+  @@ignore
   @@index([userId, begin])
   @@index([orgId])
   @@map("time_logs")
