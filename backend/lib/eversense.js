@@ -140,6 +140,46 @@ export async function getEverSenseLeaves({ userId, orgId } = {}) {
 
 // ─── KPI aggregation ─────────────────────────────────────────────────────────
 
+export async function buildKpiForAllUsers(users, period, _userToken = null, orgId = null) {
+  const [startDate, endDate] = getPeriodBounds(period)
+  const userIds = users.map(u => u.id)
+
+  const [timeLogs, tasks] = await Promise.all([
+    prisma.esTimeLog.findMany({
+      where: {
+        userId: { in: userIds },
+        begin: { gte: new Date(startDate), lte: new Date(endDate) },
+        ...(orgId ? { orgId } : {}),
+      },
+    }),
+    prisma.esMacroTask.findMany({
+      where: {
+        userId: { in: userIds },
+        createdAt: { gte: new Date(startDate), lte: new Date(endDate) },
+        ...(orgId ? { orgId } : {}),
+      },
+    }),
+  ])
+
+  const AVG_HOURS = 48.19
+  const AVG_TASKS = 3.5
+
+  return users.map(user => {
+    const userLogs = timeLogs.filter(t => t.userId === user.id)
+    const userTasks = tasks.filter(t => t.userId === user.id)
+    const hoursLogged = userLogs.reduce((sum, t) => sum + (t.duration ?? 0), 0) / 3600
+    const completedTasks = userTasks.filter(t => ['done', 'completed', 'DONE'].includes(t.status)).length
+    const performanceScore = (hoursLogged / AVG_HOURS + completedTasks / AVG_TASKS) / 2
+    const tier =
+      hoursLogged > AVG_HOURS * 1.6 ? 'BURNOUT_RISK'
+      : performanceScore >= 1.5 ? 'STAR'
+      : performanceScore >= 1.0 ? 'GOOD'
+      : performanceScore >= 0.5 ? 'AVERAGE'
+      : 'UNDERPERFORMING'
+    return { userId: user.id, userName: user.name, userImage: user.image, period, hoursLogged, tasksCompleted: completedTasks, reportsSubmitted: 0, performanceScore, tier }
+  })
+}
+
 export async function buildKpiForUser(userId, period, _userToken = null, orgId = null) {
   const [startDate, endDate] = getPeriodBounds(period)
 
